@@ -1,0 +1,5 @@
+(library
+ (name xsk_test)
+ (libraries base base_bigstring base_quickcheck expect_test_helpers xsk)
+ (inline_tests)
+ (preprocess (pps ppx_jane ppx_cstruct)))
