@@ -66,7 +66,7 @@ let make_mem frame_size frame_cnt =
 ;;
 
 let with_dev id f =
-  let veth_cmd = Printf.sprintf "/root/test/setup.sh %d" id in
+  let veth_cmd = Printf.sprintf "setup.sh %d" id in
   let res = Unix.system veth_cmd in
   (match res with
   | Unix.WEXITED 0 -> ()
@@ -74,7 +74,7 @@ let with_dev id f =
   Exn.protect
     ~f:(fun () -> f (Printf.sprintf "test%d" id))
     ~finally:(fun () ->
-      let teardown_cmd = Printf.sprintf "/root/test/teardown.sh %d" id in
+      let teardown_cmd = Printf.sprintf "teardown.sh %d" id in
       let res = Unix.system teardown_cmd in
       match res with
       | Unix.WEXITED 0 -> ()
