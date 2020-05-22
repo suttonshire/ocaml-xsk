@@ -1,0 +1,15 @@
+
+(data_only_dirs libbpf)
+
+(library
+ (name libbpf_c)
+ (c_library_flags :standard -lelf -lz)
+ (foreign_archives bpf))
+
+(rule
+ (targets libbpf.a dllbpf.so)
+ (deps (source_tree libbpf))
+ (action (progn
+          (chdir libbpf (chdir src (run make)))
+          (run cp libbpf/src/libbpf.a libbpf.a)
+          (run cp libbpf/src/libbpf.so dllbpf.so))))
