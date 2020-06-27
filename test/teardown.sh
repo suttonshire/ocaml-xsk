@@ -1,4 +1,4 @@
 #!/bin/bash
 
-TESTIF=test$1
-ip link del $TESTIF
+TESTIF=$1
+sudo ip link del $TESTIF

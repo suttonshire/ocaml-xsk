@@ -1,7 +1,11 @@
 open Base
-open Xsk 
+open Xsk
 
 let print_endline = Stdio.print_endline
+let script_dir = Sys.getenv_exn "XSK_TEST_DEPS_DIR"
+let test_if_name = Sys.getenv_exn "XSK_TEST_INTF_NAME"
+let test_if_mac = Sys.getenv_exn "XSK_TEST_INTF_MAC"
+let echo_if_mac = Sys.getenv_exn "XSK_ECHO_INTF_MAC"
 
 type%cstruct ethernet =
   { dst : uint8_t [@len 6]
@@ -24,15 +28,20 @@ type%cstruct ipv4 =
   }
 [@@big_endian]
 
+(* Convert a string like XX:XX:XX:XX:XX:XX to a string that can be used in the ethernet cstruct *)
+let mac_of_string str =
+  str
+  |> String.split ~on:':'
+  |> List.map ~f:Int.of_string
+  |> List.map ~f:Char.of_int_exn
+  |> String.of_char_list
+;;
+
 let set_pkt pkt pos =
   let ether = Cstruct.create sizeof_ethernet in
-  let src_ether_addr =
-    String.of_char_list [ '\x04'; '\x04'; '\x04'; '\x04'; '\x04'; '\x04' ]
-  in
+  let src_ether_addr = mac_of_string test_if_mac in
   set_ethernet_src src_ether_addr 0 ether;
-  let dst_ether_addr =
-    String.of_char_list [ '\x06'; '\x06'; '\x06'; '\x06'; '\x06'; '\x06' ]
-  in
+  let dst_ether_addr = mac_of_string echo_if_mac in
   set_ethernet_dst dst_ether_addr 0 ether;
   set_ethernet_ethertype ether 0x1234;
   let ip = Cstruct.create sizeof_ipv4 in
@@ -41,6 +50,7 @@ let set_pkt pkt pos =
   set_ipv4_hlen_version ip 0x45;
   set_ipv4_tos ip 0;
   set_ipv4_len ip 40;
+  (* TODO: We should derive this ourselves *)
   set_ipv4_csum ip 0xbad7;
   let data = Cstruct.concat [ ether; ip ] in
   Base_bigstring.From_bytes.blit
@@ -66,15 +76,16 @@ let make_mem frame_size frame_cnt =
 ;;
 
 let with_dev id f =
-  let veth_cmd = Printf.sprintf "setup.sh %d" id in
+  let dev = Printf.sprintf "%s%d" test_if_name id in
+  let veth_cmd = Printf.sprintf "%s/setup.sh %s %s" script_dir dev test_if_mac in
   let res = Unix.system veth_cmd in
   (match res with
   | Unix.WEXITED 0 -> ()
   | _ -> ());
   Exn.protect
-    ~f:(fun () -> f (Printf.sprintf "test%d" id))
+    ~f:(fun () -> f dev)
     ~finally:(fun () ->
-      let teardown_cmd = Printf.sprintf "teardown.sh %d" id in
+      let teardown_cmd = Printf.sprintf "%s/teardown.sh %s" script_dir dev in
       let res = Unix.system teardown_cmd in
       match res with
       | Unix.WEXITED 0 -> ()
@@ -150,7 +161,8 @@ let%expect_test "Fill_queue.produce returns the number of frames produced into t
 let%expect_test "Fill_queue.produce raises index out of bounds" =
   let umem_config = { Umem.Config.default with fill_size = 4; frame_size = 4096 } in
   test_with ~frame_cnt:4 ~umem_config (fun (_, fq, _) _ ->
-      Expect_test_helpers.show_raise (fun () -> Fill_queue.produce fq [||] ~pos:0 ~nb:1));
+      Expect_test_helpers_base.show_raise (fun () ->
+          Fill_queue.produce fq [||] ~pos:0 ~nb:1));
   [%expect {| (raised (Invalid_argument "index out of bounds")) |}]
 ;;
 
@@ -218,9 +230,9 @@ let%expect_test "Tx_queue.produce/_and_kick raises if params are outside of arra
   let umem_config = { Umem.Config.default with fill_size = 4; frame_size = 4096 } in
   let socket_config = { Socket.Config.default with rx_size = 4; tx_size = 4 } in
   test_with ~frame_cnt:8 ~umem_config ~socket_config (fun (_, _, _) (s, _, tx) ->
-      Expect_test_helpers.show_raise (fun () ->
+      Expect_test_helpers_base.show_raise (fun () ->
           ignore (Tx_queue.produce tx [||] ~pos:0 ~nb:1 : int));
-      Expect_test_helpers.show_raise (fun () ->
+      Expect_test_helpers_base.show_raise (fun () ->
           ignore (Tx_queue.produce_and_kick tx (Socket.fd s) [||] ~pos:0 ~nb:1 : int)));
   [%expect
     {|
@@ -252,7 +264,7 @@ let%expect_test "Comp_queue.consume raises if params are outside of array bounds
   let umem_config = { Umem.Config.default with fill_size = 4; frame_size = 4096 } in
   let socket_config = { Socket.Config.default with rx_size = 4; tx_size = 4 } in
   test_with ~frame_cnt:8 ~umem_config ~socket_config (fun (_, _, comp) (_, _, _) ->
-      Expect_test_helpers.show_raise (fun () ->
+      Expect_test_helpers_base.show_raise (fun () ->
           ignore (Comp_queue.consume comp [||] ~pos:0 ~nb:1 : int)));
   [%expect {| (raised (Invalid_argument "index out of bounds")) |}]
 ;;
@@ -271,16 +283,12 @@ let%expect_test "Comp_queue.consume should be empty after tx failure" =
   [%expect {| 0 -1 0 |}]
 ;;
 
-let%expect_test "Comp_queue is filled after Tx" = 
+let%expect_test "Comp_queue is filled after Tx" =
   let umem_config = { Umem.Config.default with fill_size = 4; frame_size = 4096 } in
   let socket_config = { Socket.Config.default with rx_size = 4; tx_size = 4 } in
   test_with ~frame_cnt:8 ~umem_config ~socket_config (fun (_, _, comp) (s, _, tx) ->
       let sent =
-        Tx_queue.produce
-          tx
-          [| { addr = 0; len = 33; options = 0 } |]
-          ~pos:0
-          ~nb:1
+        Tx_queue.produce tx [| { addr = 0; len = 33; options = 0 } |] ~pos:0 ~nb:1
       in
       Socket.kick_tx s;
       let completed = [| -1 |] in

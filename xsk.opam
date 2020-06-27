@@ -1,0 +1,19 @@
+opam-version: "2.0"
+name: "ocaml-xsk"
+synopsis: "OCaml bindings for the libbpf AF_XDP interface"
+maintainer: "Jesse DuMond <suttonshiredev@gmail.com>"
+authors: "Jesse DuMond <suttonshiredev@gmail.com>"
+license: "MIT"
+homepage: "https://github.com/suttonshire/ocaml-xsk"
+bug-reports: "https://github.com/suttonshire/ocaml-xsk/issues"
+depends: [
+  "dune" {build}
+  "base" {with-test}
+  "base_bigstring" {with-test}
+  "cstruct" {with-test}
+  "expect_test_helpers_kernel" {with-test}
+  "ppx_cstruct" {with-test}
+  "ppx_expect" {with-test}
+]
+build: ["dune" "build" "-j" jobs "@install"]
+dev-repo: "git+https://github.com/suttonshire/ocaml-xsk.git"
