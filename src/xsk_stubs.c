@@ -134,6 +134,38 @@ CAMLprim value fill_queue_produce(value vr, value varr, value vpos, value vnb) {
   return Val_int(fill_queue_produce(vr, varr, Int_val(vpos), Int_val(vnb)));
 }
 
+CAMLprim intnat fill_queue_produce_and_wakeup_nat(value vr, intnat sock, intnat timeout, value varr, intnat pos,
+                                              intnat nb) {
+  struct xsk_ring_prod *r;
+  unsigned int idx;
+  size_t cnt;
+
+  r = Ring_prod_ptr_val(vr);
+  cnt = xsk_ring_prod__reserve(r, nb, &idx);
+
+  for (size_t i = 0; i < cnt; i++, idx++) {
+    *xsk_ring_prod__fill_addr(r, idx) = Int_val(Field(varr, pos + i));
+  }
+
+  if (cnt > 0) {
+    xsk_ring_prod__submit(r, cnt);
+    if (xsk_ring_prod__needs_wakeup(r)) {
+      struct pollfd fd;
+
+      fd.fd = sock;
+      fd.events = POLLIN;
+      (void)poll(&fd, 1, timeout);
+    }
+  }
+
+  return cnt;
+}
+
+CAMLprim value fill_queue_produce_and_wakeup(value vr, value vsock, value vtimeout, value varr, value vpos,
+                                             value vnb) {
+  return Val_int(fill_queue_produce_and_wakeup_nat(vr, Int_val(vsock), Int_val(vtimeout), varr, Int_val(vpos), Int_val(vnb)));
+}
+
 CAMLprim intnat tx_queue_produce_nat(value vr, value varr, intnat pos,
                                      intnat nb) {
   struct xsk_ring_prod *r;
@@ -202,7 +234,7 @@ CAMLprim intnat rx_queue_poll_cons_nat(value vr, intnat sock, intnat timeout, va
 }
 
 CAMLprim value rx_queue_poll_cons(value vr, value vsock, value vtimeout, value varr, value vpos, value vnb) {
-  return rx_queue_poll_cons_nat(vr, Int_val(vsock), Int_value(vtimeout), varr, Int_val(vpos), Int_val(vnb));
+  return rx_queue_poll_cons_nat(vr, Int_val(vsock), Int_val(vtimeout), varr, Int_val(vpos), Int_val(vnb));
 }
 
 CAMLprim value umem_create(value vmem, value vsize, value vconfig) {
@@ -339,14 +371,18 @@ CAMLprim value socket_sendto_nat(intnat sock) {
   int ret;
 
   ret = sendto(sock, NULL, 0, MSG_DONTWAIT, NULL, 0);
-  if (ret >= 0 || errno == ENOBUFS || errno == EAGAIN ||
-	    errno == EBUSY || errno == ENETDOWN) {
-		return Val_unit;
+  if (ret >= 0)
+    return Val_unit;
+
+
+  if (errno != ENOBUFS && errno != EAGAIN &&
+	    errno != EBUSY && errno != ENETDOWN) {
+    raise_errno(errno);
   }
 
-  raise_errno(errno);
+  return Val_unit;
 }
 
-CAMLprim value socket_sendto_nat(value vsock) {
+CAMLprim value socket_sendto(value vsock) {
   return socket_sendto_nat(Int_val(vsock));
 }

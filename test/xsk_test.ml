@@ -28,7 +28,8 @@ type%cstruct ipv4 =
   }
 [@@big_endian]
 
-(* Convert a string like XX:XX:XX:XX:XX:XX to a string that can be used in the ethernet cstruct *)
+(* Convert a string like XX:XX:XX:XX:XX:XX to a string that can be used in the ethernet
+   cstruct *)
 let mac_of_string str =
   str
   |> String.split ~on:':'
@@ -125,11 +126,8 @@ let test_with ~frame_cnt ?umem_config ?socket_config f =
               f (umem, fill, comp) (socket, rx, tx))))
 ;;
 
-(* Fill Produce
-  - can fill up to sizef
-  - error on invalid array bounds
-  - error if addrs are invalid?
-*)
+(* Fill Produce - can fill up to sizef - error on invalid array bounds - error if addrs
+   are invalid? *)
 
 let%expect_test "Fill_queue.produce up to fill_size frames into fill queue" =
   let umem_config = { Umem.Config.default with fill_size = 4; frame_size = 4096 } in
@@ -166,11 +164,8 @@ let%expect_test "Fill_queue.produce raises index out of bounds" =
   [%expect {| (raised (Invalid_argument "index out of bounds")) |}]
 ;;
 
-(* Tx Produce
-  - can fill up to size
-  - error on invalid array bounds
-  - error if desc are invalid?
-*)
+(* Tx Produce - can fill up to size - error on invalid array bounds - error if desc are
+   invalid? *)
 let%expect_test "Tx_queue.produce up to tx_size frames into tx queue" =
   let umem_config = { Umem.Config.default with fill_size = 4; frame_size = 4096 } in
   let socket_config = { Socket.Config.default with rx_size = 4; tx_size = 4 } in
@@ -193,7 +188,7 @@ let%expect_test "Tx_queue.produce_and_kick more than tx queue size" =
       List.iter [ 0; 1; 2; 3; 4; 5 ] ~f:(fun i ->
           Stdio.printf
             "%d "
-            (Tx_queue.produce_and_kick
+            (Tx_queue.produce_and_wakeup_kernel
                tx
                (Socket.fd s)
                [| { addr = 4096 * i; len = 1; options = 0 } |]
@@ -221,8 +216,12 @@ let%expect_test "Tx_queue.produce_and_kick returns the number of frames produced
       let bufs =
         Array.init 5 ~f:(fun i -> Desc.{ addr = 4096 * i; len = 0; options = 0 })
       in
-      Stdio.printf "%d " (Tx_queue.produce_and_kick tx (Socket.fd s) bufs ~pos:0 ~nb:5);
-      Stdio.printf "%d " (Tx_queue.produce_and_kick tx (Socket.fd s) bufs ~pos:0 ~nb:4));
+      Stdio.printf
+        "%d "
+        (Tx_queue.produce_and_wakeup_kernel tx (Socket.fd s) bufs ~pos:0 ~nb:5);
+      Stdio.printf
+        "%d "
+        (Tx_queue.produce_and_wakeup_kernel tx (Socket.fd s) bufs ~pos:0 ~nb:4));
   [%expect {| 0 4 |}]
 ;;
 
@@ -233,24 +232,18 @@ let%expect_test "Tx_queue.produce/_and_kick raises if params are outside of arra
       Expect_test_helpers_base.show_raise (fun () ->
           ignore (Tx_queue.produce tx [||] ~pos:0 ~nb:1 : int));
       Expect_test_helpers_base.show_raise (fun () ->
-          ignore (Tx_queue.produce_and_kick tx (Socket.fd s) [||] ~pos:0 ~nb:1 : int)));
+          ignore
+            (Tx_queue.produce_and_wakeup_kernel tx (Socket.fd s) [||] ~pos:0 ~nb:1 : int)));
   [%expect
     {|
   (raised (Invalid_argument "index out of bounds"))
   (raised (Invalid_argument "index out of bounds")) |}]
 ;;
 
-(*
-  Consume RX
-  - Consume as many as are RX'd
-  - error on invalid array bounds
-*)
+(* Consume RX - Consume as many as are RX'd - error on invalid array bounds *)
 
-(*
-  Consume Comp
-  - Consume as many as are completed (after tx)
-  - error on invalid array bounds
-*)
+(* Consume Comp - Consume as many as are completed (after tx) - error on invalid array
+   bounds *)
 
 let%expect_test "Comp_queue.consume returns zero when nothing is available" =
   let umem_config = { Umem.Config.default with fill_size = 4; frame_size = 4096 } in
@@ -276,7 +269,7 @@ let%expect_test "Comp_queue.consume should be empty after tx failure" =
       let bufs =
         Array.init 5 ~f:(fun i -> Desc.{ addr = 4096 * i; len = 0; options = 0 })
       in
-      let sent = Tx_queue.produce_and_kick tx (Socket.fd s) bufs ~pos:0 ~nb:5 in
+      let sent = Tx_queue.produce_and_wakeup_kernel tx (Socket.fd s) bufs ~pos:0 ~nb:5 in
       let completed = [| -1 |] in
       let consumed = Comp_queue.consume comp completed ~pos:0 ~nb:1 in
       Stdio.printf "%d %d %d" sent completed.(0) consumed);
@@ -290,23 +283,14 @@ let%expect_test "Comp_queue is filled after Tx" =
       let sent =
         Tx_queue.produce tx [| { addr = 0; len = 33; options = 0 } |] ~pos:0 ~nb:1
       in
-      Socket.kick_tx s;
+      Socket.wakeup_kernel_with_sendto s;
       let completed = [| -1 |] in
       let consumed = Comp_queue.consume comp completed ~pos:0 ~nb:1 in
       Stdio.printf "%d %d %d" sent completed.(0) consumed);
   [%expect {| 1 0 1 |}]
 ;;
 
-(*
-  Create socket
-    - error on invalid parameters
-    - error on OS error
-*)
+(* Create socket - error on invalid parameters - error on OS error *)
 
-(*
-  Create Umem
-    - error on invalid parameters
-    - error on OS error
-    - ring sizes must be powers of two
-    - memory must be page aligned
-*)
+(* Create Umem - error on invalid parameters - error on OS error - ring sizes must be
+   powers of two - memory must be page aligned *)
