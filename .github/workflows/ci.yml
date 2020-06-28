@@ -20,7 +20,7 @@ jobs:
         submodules: true
     - name: Update system package deps
       run: |
-           sudo apt-get update 
+           sudo apt-get update
            sudo apt-get install -y libelf-dev zlib1g-dev gcc-multilib opam ocaml
     - name: Create opam switch
       run: |
@@ -33,12 +33,6 @@ jobs:
            sudo opam install -y base dune ppx_expect base_bigstring ppx_cstruct cstruct expect_test_helpers_kernel
            sudo opam pin add xsk.dev -y .
            sudo opam install -t . --deps-only
-    - name: Configure network echo interface
-      run: |
-           sudo ip tuntap add name echo mode tap
-           sudo ip link set dev $XSK_ECHO_INTF_NAME address $XSK_ECHO_INTF_MAC
-           sudo ip link set dev $XSK_ECHO_INTF_NAME xdpgeneric obj $XSK_TEST_DEPS_DIR/xdp/xdp_prog_kern.o sec xdp_echo
-           sudo ip link set dev $XSK_ECHO_INTF_NAME up
     - name: Build tests
       run: |
            sudo opam exec -- dune build

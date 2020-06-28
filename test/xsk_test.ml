@@ -5,6 +5,7 @@ let print_endline = Stdio.print_endline
 let script_dir = Sys.getenv_exn "XSK_TEST_DEPS_DIR"
 let test_if_name = Sys.getenv_exn "XSK_TEST_INTF_NAME"
 let test_if_mac = Sys.getenv_exn "XSK_TEST_INTF_MAC"
+let echo_if_name = Sys.getenv_exn "XSK_ECHO_INTF_NAME"
 let echo_if_mac = Sys.getenv_exn "XSK_ECHO_INTF_MAC"
 
 type%cstruct ethernet =
@@ -76,17 +77,27 @@ let make_mem frame_size frame_cnt =
   buf
 ;;
 
-let with_dev id f =
-  let dev = Printf.sprintf "%s%d" test_if_name id in
-  let veth_cmd = Printf.sprintf "%s/setup.sh %s %s" script_dir dev test_if_mac in
-  let res = Unix.system veth_cmd in
+let with_dev f =
+  let setup_cmd =
+    Printf.sprintf
+      "%s/setup.sh %s %s %s %s %s"
+      script_dir
+      test_if_name
+      test_if_mac
+      echo_if_name
+      echo_if_mac
+      script_dir
+  in
+  let res = Unix.system setup_cmd in
   (match res with
   | Unix.WEXITED 0 -> ()
   | _ -> ());
   Exn.protect
-    ~f:(fun () -> f dev)
+    ~f:(fun () -> f test_if_name)
     ~finally:(fun () ->
-      let teardown_cmd = Printf.sprintf "%s/teardown.sh %s" script_dir dev in
+      let teardown_cmd =
+        Printf.sprintf "%s/teardown.sh %s %s" script_dir test_if_name echo_if_name
+      in
       let res = Unix.system teardown_cmd in
       match res with
       | Unix.WEXITED 0 -> ()
@@ -119,8 +130,7 @@ let test_with ~frame_cnt ?umem_config ?socket_config f =
     | None -> Socket.Config.default
     | Some x -> x
   in
-  let test_id = Random.bits () in
-  with_dev test_id (fun ifname ->
+  with_dev (fun ifname ->
       with_umem umem_config frame_cnt (fun mem umem fill comp ->
           with_socket umem ifname 0 socket_config (fun socket rx tx ->
               f mem (umem, fill, comp) (socket, rx, tx))))
@@ -337,7 +347,7 @@ let%expect_test "Comp_queue.consume should be empty after tx failure" =
 let%expect_test "Comp_queue is filled after Tx" =
   let umem_config = { Umem.Config.default with fill_size = 4; frame_size = 4096 } in
   let socket_config = { Socket.Config.default with rx_size = 4; tx_size = 4 } in
-  test_with ~frame_cnt:8 ~umem_config ~socket_config (fun _(_, _, comp) (s, _, tx) ->
+  test_with ~frame_cnt:8 ~umem_config ~socket_config (fun _ (_, _, comp) (s, _, tx) ->
       let sent =
         Tx_queue.produce tx [| { addr = 0; len = 33; options = 0 } |] ~pos:0 ~nb:1
       in
@@ -373,7 +383,7 @@ let%expect_test "Rx_queue.poll_and_consume returns zero when nothing is availabl
         ~nb:1
       |> Option.sexp_of_t Int.sexp_of_t
       |> Stdio.print_s);
-  [%expect {| (None) |}]
+  [%expect {| () |}]
 ;;
 
 let%expect_test "Rx_queue.consume raises if params are outside of array bounds" =
@@ -401,33 +411,40 @@ let%expect_test "Rx_queue.consume yields data after Tx" =
   test_with ~frame_cnt:8 ~umem_config ~socket_config (fun mem (_, fill, _) (s, rx, tx) ->
       let desc = Desc.{ addr = 0; len = 33; options = 0 } in
       set_pkt mem desc.addr;
-      let fd = Socket.fd s in
-      let filled = Fill_queue.produce_and_wakeup_kernel fill fd [| 4096 |] ~pos:0 ~nb:1 in
-      let sent = Tx_queue.produce_and_wakeup_kernel tx fd [| desc |] ~pos:0 ~nb:1 in
+      let filled = Fill_queue.produce fill [| 4096 |] ~pos:0 ~nb:1 in
+      let sent = Tx_queue.produce tx [| desc |] ~pos:0 ~nb:1 in
+      Socket.wakeup_kernel_with_sendto s;
       desc.addr <- 0;
       desc.len <- 0;
       desc.options <- 0;
       let consumed = Rx_queue.consume rx [| desc |] ~pos:0 ~nb:1 in
       Stdio.printf "%d %d %d %d %d" sent filled consumed desc.addr desc.len);
-  [%expect {| 1 0 1 |}]
+  [%expect {| 1 1 1 4096 33 |}]
 ;;
 
 let%expect_test "Rx_queue.poll_and_consume yields data after Tx" =
   let umem_config = { Umem.Config.default with fill_size = 4; frame_size = 4096 } in
-  let socket_config = { Socket.Config.default with rx_size = 4; tx_size = 4 } in
+  let socket_config =
+    { Socket.Config.default with
+      rx_size = 4
+    ; tx_size = 4
+    ; xdp_flags = [ XDP_FLAGS_SKB_MODE ]
+    }
+  in
   test_with ~frame_cnt:8 ~umem_config ~socket_config (fun mem (_, fill, _) (s, rx, tx) ->
       let desc = Desc.{ addr = 0; len = 33; options = 0 } in
       set_pkt mem desc.addr;
       let fd = Socket.fd s in
-      let filled = Fill_queue.produce_and_wakeup_kernel fill fd [| 4096 |] ~pos:0 ~nb:1 in
-      let sent = Tx_queue.produce_and_wakeup_kernel tx fd [| desc |] ~pos:0 ~nb:1 in
+      let filled = Fill_queue.produce fill [| 4096 |] ~pos:0 ~nb:1 in
+      let sent = Tx_queue.produce tx [| desc |] ~pos:0 ~nb:1 in
+      Socket.wakeup_kernel_with_sendto s;
       desc.addr <- 0;
       desc.len <- 0;
       desc.options <- 0;
       let ret = Rx_queue.poll_and_consume rx fd 1000 [| desc |] ~pos:0 ~nb:1 in
       let consumed = Option.value_exn ret in
       Stdio.printf "%d %d %d %d %d" sent filled consumed desc.addr desc.len);
-  [%expect {| 1 0 1 |}]
+  [%expect {| 1 1 1 4096 33 |}]
 ;;
 
 (* Create socket - error on invalid parameters - error on OS error *)
