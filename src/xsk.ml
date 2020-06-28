@@ -78,7 +78,12 @@ type umem
 type socket
 
 external needs_wakeup_stub : ring_prod -> bool = "ring_prod_needs_wakeup" [@@noalloc]
-external socket_sendto_stub : (int[@untagged]) -> unit = "socket_sendto" "socket_sendto_nat" [@@noalloc]
+
+external socket_sendto_stub
+  :  (int[@untagged])
+  -> unit
+  = "socket_sendto" "socket_sendto_nat"
+  [@@noalloc]
 
 module Comp_queue = struct
   type t = ring_cons
@@ -131,7 +136,7 @@ module Fill_queue = struct
     produce_stub t arr pos nb
   ;;
 
-  let produce_and_wakeup_kernel t (fd:Unix.file_descr) arr ~pos ~nb =
+  let produce_and_wakeup_kernel t (fd : Unix.file_descr) arr ~pos ~nb =
     ignore (arr.(pos + nb - 1) : int);
     produce_and_wakeup_stub t (Obj.magic fd) 1000 arr pos nb
   ;;
@@ -195,7 +200,7 @@ module Rx_queue = struct
     consume_stub t arr pos nb
   ;;
 
-  let poll_and_consume t (fd:Unix.file_descr) timeout arr ~pos ~nb =
+  let poll_and_consume t (fd : Unix.file_descr) timeout arr ~pos ~nb =
     ignore (arr.(pos + nb - 1) : Desc.t);
     let ret = poll_and_consume_stub t (Obj.magic fd) timeout arr pos nb in
     if ret = 0 then None else Some ret
