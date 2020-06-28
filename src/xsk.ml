@@ -203,7 +203,7 @@ module Rx_queue = struct
   let poll_and_consume t (fd : Unix.file_descr) timeout arr ~pos ~nb =
     ignore (arr.(pos + nb - 1) : Desc.t);
     let ret = poll_and_consume_stub t (Obj.magic fd) timeout arr pos nb in
-    if ret = 0 then None else Some ret
+    if ret < 0 then None else Some ret
   ;;
 end
 

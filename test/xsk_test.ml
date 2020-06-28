@@ -98,7 +98,7 @@ let with_umem config frame_cnt f =
   let umem, fill, comp =
     Umem.create mem (config.Umem.Config.frame_size * frame_cnt) config
   in
-  Exn.protect ~f:(fun () -> f umem fill comp) ~finally:(fun () -> Umem.delete umem)
+  Exn.protect ~f:(fun () -> f mem umem fill comp) ~finally:(fun () -> Umem.delete umem)
 ;;
 
 let with_socket umem ifname queue_id config f =
@@ -121,32 +121,58 @@ let test_with ~frame_cnt ?umem_config ?socket_config f =
   in
   let test_id = Random.bits () in
   with_dev test_id (fun ifname ->
-      with_umem umem_config frame_cnt (fun umem fill comp ->
+      with_umem umem_config frame_cnt (fun mem umem fill comp ->
           with_socket umem ifname 0 socket_config (fun socket rx tx ->
-              f (umem, fill, comp) (socket, rx, tx))))
+              f mem (umem, fill, comp) (socket, rx, tx))))
 ;;
 
-(* Fill Produce - can fill up to sizef - error on invalid array bounds - error if addrs
-   are invalid? *)
-
-let%expect_test "Fill_queue.produce up to fill_size frames into fill queue" =
+(* Fill_queue tests *)
+let%expect_test "Fill_queue.produce up to fill_size frames" =
   let umem_config = { Umem.Config.default with fill_size = 4; frame_size = 4096 } in
-  test_with ~frame_cnt:8 ~umem_config (fun (_, fq, _) _ ->
+  test_with ~frame_cnt:8 ~umem_config (fun _ (_, fq, _) _ ->
       List.iter [ 1; 2; 3; 4; 5; 6 ] ~f:(fun i ->
           Stdio.printf "%d " (Fill_queue.produce fq [| i * 4096 |] ~pos:0 ~nb:1)));
   [%expect {| 1 1 1 1 0 0 |}]
 ;;
 
+let%expect_test "Fill_queue.produce_and_wakeup_kernel up to fill_size frames" =
+  let umem_config = { Umem.Config.default with fill_size = 4; frame_size = 4096 } in
+  test_with ~frame_cnt:8 ~umem_config (fun _ (_, fq, _) (sock, _, _) ->
+      List.iter [ 1; 2; 3; 4; 5; 6 ] ~f:(fun i ->
+          let fd = Socket.fd sock in
+          Stdio.printf
+            "%d "
+            (Fill_queue.produce_and_wakeup_kernel fq fd [| i * 4096 |] ~pos:0 ~nb:1)));
+  [%expect {| 1 1 1 1 0 0 |}]
+;;
+
 let%expect_test "Fill_queue.produce a batch of fill_size frames into fill queue" =
   let umem_config = { Umem.Config.default with fill_size = 4; frame_size = 4096 } in
-  test_with ~frame_cnt:4 ~umem_config (fun (_, fq, _) _ ->
+  test_with ~frame_cnt:4 ~umem_config (fun _ (_, fq, _) _ ->
       Stdio.printf "%d" (Fill_queue.produce fq [| 0; 4096; 8192; 12288 |] ~pos:0 ~nb:4));
+  [%expect {| 4 |}]
+;;
+
+let%expect_test "Fill_queue.produce_and_wakeup_kernel a batch of fill_size frames into \
+                 fill queue"
+  =
+  let umem_config = { Umem.Config.default with fill_size = 4; frame_size = 4096 } in
+  test_with ~frame_cnt:4 ~umem_config (fun _ (_, fq, _) (sock, _, _) ->
+      let fd = Socket.fd sock in
+      Stdio.printf
+        "%d"
+        (Fill_queue.produce_and_wakeup_kernel
+           fq
+           fd
+           [| 0; 4096; 8192; 12288 |]
+           ~pos:0
+           ~nb:4));
   [%expect {| 4 |}]
 ;;
 
 let%expect_test "Fill_queue.produce returns the number of frames produced into the queue" =
   let umem_config = { Umem.Config.default with fill_size = 4; frame_size = 4096 } in
-  test_with ~frame_cnt:8 ~umem_config (fun (_, fq, _) _ ->
+  test_with ~frame_cnt:8 ~umem_config (fun _ (_, fq, _) _ ->
       Stdio.printf
         "%d "
         (Fill_queue.produce fq [| 0; 4096; 8192; 12288; 16384 |] ~pos:0 ~nb:5);
@@ -156,20 +182,53 @@ let%expect_test "Fill_queue.produce returns the number of frames produced into t
   [%expect {| 0 4 |}]
 ;;
 
+let%expect_test "Fill_queue.produce_and_wakeup_kernel returns the number of frames \
+                 produced into the queue"
+  =
+  let umem_config = { Umem.Config.default with fill_size = 4; frame_size = 4096 } in
+  test_with ~frame_cnt:8 ~umem_config (fun _ (_, fq, _) (sock, _, _) ->
+      let fd = Socket.fd sock in
+      Stdio.printf
+        "%d "
+        (Fill_queue.produce_and_wakeup_kernel
+           fq
+           fd
+           [| 0; 4096; 8192; 12288; 16384 |]
+           ~pos:0
+           ~nb:5);
+      Stdio.printf
+        "%d"
+        (Fill_queue.produce_and_wakeup_kernel
+           fq
+           fd
+           [| 0; 4096; 8192; 12288; 16384 |]
+           ~pos:0
+           ~nb:4));
+  [%expect {| 0 4 |}]
+;;
+
 let%expect_test "Fill_queue.produce raises index out of bounds" =
   let umem_config = { Umem.Config.default with fill_size = 4; frame_size = 4096 } in
-  test_with ~frame_cnt:4 ~umem_config (fun (_, fq, _) _ ->
+  test_with ~frame_cnt:4 ~umem_config (fun _ (_, fq, _) _ ->
       Expect_test_helpers_base.show_raise (fun () ->
           Fill_queue.produce fq [||] ~pos:0 ~nb:1));
   [%expect {| (raised (Invalid_argument "index out of bounds")) |}]
 ;;
 
-(* Tx Produce - can fill up to size - error on invalid array bounds - error if desc are
-   invalid? *)
+let%expect_test "Fill_queue.produce_and_wakeup raises index out of bounds" =
+  let umem_config = { Umem.Config.default with fill_size = 4; frame_size = 4096 } in
+  test_with ~frame_cnt:4 ~umem_config (fun _ (_, fq, _) (sock, _, _) ->
+      Expect_test_helpers_base.show_raise (fun () ->
+          let fd = Socket.fd sock in
+          Fill_queue.produce_and_wakeup_kernel fq fd [||] ~pos:0 ~nb:1));
+  [%expect {| (raised (Invalid_argument "index out of bounds")) |}]
+;;
+
+(* Tx_queue tests *)
 let%expect_test "Tx_queue.produce up to tx_size frames into tx queue" =
   let umem_config = { Umem.Config.default with fill_size = 4; frame_size = 4096 } in
   let socket_config = { Socket.Config.default with rx_size = 4; tx_size = 4 } in
-  test_with ~frame_cnt:8 ~umem_config ~socket_config (fun (_, _, _) (_, _, tx) ->
+  test_with ~frame_cnt:8 ~umem_config ~socket_config (fun _ (_, _, _) (_, _, tx) ->
       List.iter [ 0; 1; 2; 3; 4; 5 ] ~f:(fun i ->
           Stdio.printf
             "%d "
@@ -181,10 +240,10 @@ let%expect_test "Tx_queue.produce up to tx_size frames into tx queue" =
   [%expect {| 1 1 1 1 0 0 |}]
 ;;
 
-let%expect_test "Tx_queue.produce_and_kick more than tx queue size" =
+let%expect_test "Tx_queue.produce_and_wakeup_kernel more than tx queue size" =
   let umem_config = { Umem.Config.default with fill_size = 4; frame_size = 4096 } in
   let socket_config = { Socket.Config.default with rx_size = 4; tx_size = 4 } in
-  test_with ~frame_cnt:8 ~umem_config ~socket_config (fun (_, _, _) (s, _, tx) ->
+  test_with ~frame_cnt:8 ~umem_config ~socket_config (fun _ (_, _, _) (s, _, tx) ->
       List.iter [ 0; 1; 2; 3; 4; 5 ] ~f:(fun i ->
           Stdio.printf
             "%d "
@@ -200,7 +259,7 @@ let%expect_test "Tx_queue.produce_and_kick more than tx queue size" =
 let%expect_test "Tx_queue.produce returns the number of frames produced" =
   let umem_config = { Umem.Config.default with fill_size = 4; frame_size = 4096 } in
   let socket_config = { Socket.Config.default with rx_size = 4; tx_size = 4 } in
-  test_with ~frame_cnt:8 ~umem_config ~socket_config (fun (_, _, _) (_, _, tx) ->
+  test_with ~frame_cnt:8 ~umem_config ~socket_config (fun _ (_, _, _) (_, _, tx) ->
       let bufs =
         Array.init 5 ~f:(fun i -> Desc.{ addr = 4096 * i; len = 0; options = 0 })
       in
@@ -209,10 +268,11 @@ let%expect_test "Tx_queue.produce returns the number of frames produced" =
   [%expect {| 0 4 |}]
 ;;
 
-let%expect_test "Tx_queue.produce_and_kick returns the number of frames produced" =
+let%expect_test "Tx_queue.produce_and_wakeup_kernel returns the number of frames produced"
+  =
   let umem_config = { Umem.Config.default with fill_size = 4; frame_size = 4096 } in
   let socket_config = { Socket.Config.default with rx_size = 4; tx_size = 4 } in
-  test_with ~frame_cnt:8 ~umem_config ~socket_config (fun (_, _, _) (s, _, tx) ->
+  test_with ~frame_cnt:8 ~umem_config ~socket_config (fun _ (_, _, _) (s, _, tx) ->
       let bufs =
         Array.init 5 ~f:(fun i -> Desc.{ addr = 4096 * i; len = 0; options = 0 })
       in
@@ -225,10 +285,12 @@ let%expect_test "Tx_queue.produce_and_kick returns the number of frames produced
   [%expect {| 0 4 |}]
 ;;
 
-let%expect_test "Tx_queue.produce/_and_kick raises if params are outside of array bounds" =
+let%expect_test "Tx_queue.produce/_and_wakeup_kernel raises if params are outside of \
+                 array bounds"
+  =
   let umem_config = { Umem.Config.default with fill_size = 4; frame_size = 4096 } in
   let socket_config = { Socket.Config.default with rx_size = 4; tx_size = 4 } in
-  test_with ~frame_cnt:8 ~umem_config ~socket_config (fun (_, _, _) (s, _, tx) ->
+  test_with ~frame_cnt:8 ~umem_config ~socket_config (fun _ (_, _, _) (s, _, tx) ->
       Expect_test_helpers_base.show_raise (fun () ->
           ignore (Tx_queue.produce tx [||] ~pos:0 ~nb:1 : int));
       Expect_test_helpers_base.show_raise (fun () ->
@@ -240,15 +302,11 @@ let%expect_test "Tx_queue.produce/_and_kick raises if params are outside of arra
   (raised (Invalid_argument "index out of bounds")) |}]
 ;;
 
-(* Consume RX - Consume as many as are RX'd - error on invalid array bounds *)
-
-(* Consume Comp - Consume as many as are completed (after tx) - error on invalid array
-   bounds *)
-
+(* Comp_queue tests *)
 let%expect_test "Comp_queue.consume returns zero when nothing is available" =
   let umem_config = { Umem.Config.default with fill_size = 4; frame_size = 4096 } in
   let socket_config = { Socket.Config.default with rx_size = 4; tx_size = 4 } in
-  test_with ~frame_cnt:8 ~umem_config ~socket_config (fun (_, _, comp) (_, _, _) ->
+  test_with ~frame_cnt:8 ~umem_config ~socket_config (fun _ (_, _, comp) (_, _, _) ->
       Stdio.printf "%d" (Comp_queue.consume comp [| 0 |] ~pos:0 ~nb:1));
   [%expect {| 0 |}]
 ;;
@@ -256,7 +314,7 @@ let%expect_test "Comp_queue.consume returns zero when nothing is available" =
 let%expect_test "Comp_queue.consume raises if params are outside of array bounds" =
   let umem_config = { Umem.Config.default with fill_size = 4; frame_size = 4096 } in
   let socket_config = { Socket.Config.default with rx_size = 4; tx_size = 4 } in
-  test_with ~frame_cnt:8 ~umem_config ~socket_config (fun (_, _, comp) (_, _, _) ->
+  test_with ~frame_cnt:8 ~umem_config ~socket_config (fun _ (_, _, comp) (_, _, _) ->
       Expect_test_helpers_base.show_raise (fun () ->
           ignore (Comp_queue.consume comp [||] ~pos:0 ~nb:1 : int)));
   [%expect {| (raised (Invalid_argument "index out of bounds")) |}]
@@ -265,7 +323,7 @@ let%expect_test "Comp_queue.consume raises if params are outside of array bounds
 let%expect_test "Comp_queue.consume should be empty after tx failure" =
   let umem_config = { Umem.Config.default with fill_size = 4; frame_size = 4096 } in
   let socket_config = { Socket.Config.default with rx_size = 4; tx_size = 4 } in
-  test_with ~frame_cnt:8 ~umem_config ~socket_config (fun (_, _, comp) (s, _, tx) ->
+  test_with ~frame_cnt:8 ~umem_config ~socket_config (fun _ (_, _, comp) (s, _, tx) ->
       let bufs =
         Array.init 5 ~f:(fun i -> Desc.{ addr = 4096 * i; len = 0; options = 0 })
       in
@@ -279,7 +337,7 @@ let%expect_test "Comp_queue.consume should be empty after tx failure" =
 let%expect_test "Comp_queue is filled after Tx" =
   let umem_config = { Umem.Config.default with fill_size = 4; frame_size = 4096 } in
   let socket_config = { Socket.Config.default with rx_size = 4; tx_size = 4 } in
-  test_with ~frame_cnt:8 ~umem_config ~socket_config (fun (_, _, comp) (s, _, tx) ->
+  test_with ~frame_cnt:8 ~umem_config ~socket_config (fun _(_, _, comp) (s, _, tx) ->
       let sent =
         Tx_queue.produce tx [| { addr = 0; len = 33; options = 0 } |] ~pos:0 ~nb:1
       in
@@ -287,6 +345,88 @@ let%expect_test "Comp_queue is filled after Tx" =
       let completed = [| -1 |] in
       let consumed = Comp_queue.consume comp completed ~pos:0 ~nb:1 in
       Stdio.printf "%d %d %d" sent completed.(0) consumed);
+  [%expect {| 1 0 1 |}]
+;;
+
+(* Rx_queue tests *)
+let%expect_test "Rx_queue.consume returns zero when nothing is available" =
+  let umem_config = { Umem.Config.default with fill_size = 4; frame_size = 4096 } in
+  let socket_config = { Socket.Config.default with rx_size = 4; tx_size = 4 } in
+  test_with ~frame_cnt:8 ~umem_config ~socket_config (fun _ (_, _, _) (_, rx, _) ->
+      Stdio.printf
+        "%d"
+        (Rx_queue.consume rx [| Desc.{ addr = 0; len = 0; options = 0 } |] ~pos:0 ~nb:1));
+  [%expect {| 0 |}]
+;;
+
+let%expect_test "Rx_queue.poll_and_consume returns zero when nothing is available" =
+  let umem_config = { Umem.Config.default with fill_size = 4; frame_size = 4096 } in
+  let socket_config = { Socket.Config.default with rx_size = 4; tx_size = 4 } in
+  test_with ~frame_cnt:8 ~umem_config ~socket_config (fun _ (_, _, _) (sock, rx, _) ->
+      let fd = Socket.fd sock in
+      Rx_queue.poll_and_consume
+        rx
+        fd
+        10
+        [| Desc.{ addr = 0; len = 0; options = 0 } |]
+        ~pos:0
+        ~nb:1
+      |> Option.sexp_of_t Int.sexp_of_t
+      |> Stdio.print_s);
+  [%expect {| (None) |}]
+;;
+
+let%expect_test "Rx_queue.consume raises if params are outside of array bounds" =
+  let umem_config = { Umem.Config.default with fill_size = 4; frame_size = 4096 } in
+  let socket_config = { Socket.Config.default with rx_size = 4; tx_size = 4 } in
+  test_with ~frame_cnt:8 ~umem_config ~socket_config (fun _ (_, _, _) (_, rx, _) ->
+      Expect_test_helpers_base.show_raise (fun () ->
+          ignore (Rx_queue.consume rx [||] ~pos:0 ~nb:1 : int)));
+  [%expect {| (raised (Invalid_argument "index out of bounds")) |}]
+;;
+
+let%expect_test "Rx_queue.poll_and_consume raises if params are outside of array bounds" =
+  let umem_config = { Umem.Config.default with fill_size = 4; frame_size = 4096 } in
+  let socket_config = { Socket.Config.default with rx_size = 4; tx_size = 4 } in
+  test_with ~frame_cnt:8 ~umem_config ~socket_config (fun _ (_, _, _) (sock, rx, _) ->
+      Expect_test_helpers_base.show_raise (fun () ->
+          let fd = Socket.fd sock in
+          ignore (Rx_queue.poll_and_consume rx fd 10 [||] ~pos:0 ~nb:1 : int option)));
+  [%expect {| (raised (Invalid_argument "index out of bounds")) |}]
+;;
+
+let%expect_test "Rx_queue.consume yields data after Tx" =
+  let umem_config = { Umem.Config.default with fill_size = 4; frame_size = 4096 } in
+  let socket_config = { Socket.Config.default with rx_size = 4; tx_size = 4 } in
+  test_with ~frame_cnt:8 ~umem_config ~socket_config (fun mem (_, fill, _) (s, rx, tx) ->
+      let desc = Desc.{ addr = 0; len = 33; options = 0 } in
+      set_pkt mem desc.addr;
+      let fd = Socket.fd s in
+      let filled = Fill_queue.produce_and_wakeup_kernel fill fd [| 4096 |] ~pos:0 ~nb:1 in
+      let sent = Tx_queue.produce_and_wakeup_kernel tx fd [| desc |] ~pos:0 ~nb:1 in
+      desc.addr <- 0;
+      desc.len <- 0;
+      desc.options <- 0;
+      let consumed = Rx_queue.consume rx [| desc |] ~pos:0 ~nb:1 in
+      Stdio.printf "%d %d %d %d %d" sent filled consumed desc.addr desc.len);
+  [%expect {| 1 0 1 |}]
+;;
+
+let%expect_test "Rx_queue.poll_and_consume yields data after Tx" =
+  let umem_config = { Umem.Config.default with fill_size = 4; frame_size = 4096 } in
+  let socket_config = { Socket.Config.default with rx_size = 4; tx_size = 4 } in
+  test_with ~frame_cnt:8 ~umem_config ~socket_config (fun mem (_, fill, _) (s, rx, tx) ->
+      let desc = Desc.{ addr = 0; len = 33; options = 0 } in
+      set_pkt mem desc.addr;
+      let fd = Socket.fd s in
+      let filled = Fill_queue.produce_and_wakeup_kernel fill fd [| 4096 |] ~pos:0 ~nb:1 in
+      let sent = Tx_queue.produce_and_wakeup_kernel tx fd [| desc |] ~pos:0 ~nb:1 in
+      desc.addr <- 0;
+      desc.len <- 0;
+      desc.options <- 0;
+      let ret = Rx_queue.poll_and_consume rx fd 1000 [| desc |] ~pos:0 ~nb:1 in
+      let consumed = Option.value_exn ret in
+      Stdio.printf "%d %d %d %d %d" sent filled consumed desc.addr desc.len);
   [%expect {| 1 0 1 |}]
 ;;
 

@@ -229,8 +229,13 @@ CAMLprim intnat rx_queue_poll_cons_nat(value vr, intnat sock, intnat timeout,
   fd.fd = sock;
   fd.events = POLLIN;
   ret = poll(&fd, 1, timeout);
-  if (ret <= 0)
-    return -1;
+  if (ret < 0) {
+    if (errno != EINTR) {
+      raise_errno(errno);
+    } else {
+      return -1;
+    }
+  }
 
   if (!(fd.revents & POLLIN))
     return -1;
