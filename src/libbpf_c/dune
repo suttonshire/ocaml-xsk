@@ -1,4 +1,3 @@
-
 (data_only_dirs libbpf)
 
 (library
@@ -8,8 +7,14 @@
 
 (rule
  (targets libbpf.a dllbpf.so)
- (deps (source_tree libbpf))
- (action (progn
-          (chdir libbpf (chdir src (run make)))
-          (run cp libbpf/src/libbpf.a libbpf.a)
-          (run cp libbpf/src/libbpf.so dllbpf.so))))
+ (deps
+  (source_tree libbpf))
+ (action
+  (progn
+   (chdir
+    libbpf
+    (chdir
+     src
+     (run make)))
+   (run cp libbpf/src/libbpf.a libbpf.a)
+   (run cp libbpf/src/libbpf.so dllbpf.so))))

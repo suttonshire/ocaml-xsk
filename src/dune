@@ -1,6 +1,6 @@
 (library
- (name            xsk)
- (libraries       libbpf_c)
+ (name xsk)
+ (libraries libbpf_c)
  (ocamlopt_flags :standard -O3)
  (c_library_flags :standard -lelf -lz)
  (foreign_stubs
