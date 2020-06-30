@@ -1,0 +1,7 @@
+(lang dune 2.6)
+(env
+  (release (c_flags :standard -O3))
+  (test
+    (c_flags :standard -g -fsanitize=undefined -fsanitize=address)
+    (flags :standard -cclib -lubsan -cclib -lasan))
+)
