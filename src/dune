@@ -1,10 +1,10 @@
 (library
- (name            xsk)
- (libraries       libbpf_c)
- (ocamlopt_flags -O3)
+ (name xsk)
+ (libraries libbpf_c)
+ (ocamlopt_flags :standard -O3)
  (c_library_flags :standard -lelf -lz)
  (foreign_stubs
   (language c)
   (include_dirs libbpf_c/libbpf/src libbpf_c/libbpf/include/uapi)
-  (flags -Wall -Wextra -Werror -std=gnu11 -O3)
+  (flags :standard -Wall -Wextra -Werror -std=gnu11)
   (names xsk_stubs)))

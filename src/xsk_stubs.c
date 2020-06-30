@@ -134,6 +134,42 @@ CAMLprim value fill_queue_produce(value vr, value varr, value vpos, value vnb) {
   return Val_int(fill_queue_produce(vr, varr, Int_val(vpos), Int_val(vnb)));
 }
 
+CAMLprim intnat fill_queue_produce_and_wakeup_nat(value vr, intnat sock,
+                                                  intnat timeout, value varr,
+                                                  intnat pos, intnat nb) {
+  struct xsk_ring_prod *r;
+  unsigned int idx;
+  size_t cnt;
+
+  r = Ring_prod_ptr_val(vr);
+  cnt = xsk_ring_prod__reserve(r, nb, &idx);
+
+  for (size_t i = 0; i < cnt; i++, idx++) {
+    *xsk_ring_prod__fill_addr(r, idx) = Int_val(Field(varr, pos + i));
+  }
+
+  if (cnt > 0) {
+    xsk_ring_prod__submit(r, cnt);
+    if (xsk_ring_prod__needs_wakeup(r)) {
+      struct pollfd fd;
+
+      fd.fd = sock;
+      fd.events = POLLIN;
+      (void)poll(&fd, 1, timeout);
+    }
+  }
+
+  return cnt;
+}
+
+CAMLprim value fill_queue_produce_and_wakeup(value vr, value vsock,
+                                             value vtimeout, value varr,
+                                             value vpos, value vnb) {
+  return Val_int(
+      fill_queue_produce_and_wakeup_nat(vr, Int_val(vsock), Int_val(vtimeout),
+                                        varr, Int_val(vpos), Int_val(vnb)));
+}
+
 CAMLprim intnat tx_queue_produce_nat(value vr, value varr, intnat pos,
                                      intnat nb) {
   struct xsk_ring_prod *r;
@@ -183,6 +219,34 @@ CAMLprim intnat rx_queue_cons_nat(value vr, value varr, intnat pos, intnat nb) {
 
 CAMLprim value rx_queue_cons(value vr, value varr, value vpos, value vnb) {
   return Val_int(rx_queue_cons_nat(vr, varr, Int_val(vpos), Int_val(vnb)));
+}
+
+CAMLprim intnat rx_queue_poll_cons_nat(value vr, intnat sock, intnat timeout,
+                                       value varr, intnat pos, intnat nb) {
+  struct pollfd fd;
+  int ret;
+
+  fd.fd = sock;
+  fd.events = POLLIN;
+  ret = poll(&fd, 1, timeout);
+  if (ret < 0) {
+    if (errno != EINTR) {
+      raise_errno(errno);
+    } else {
+      return -1;
+    }
+  }
+
+  if (!(fd.revents & POLLIN))
+    return -1;
+
+  return rx_queue_cons_nat(vr, varr, pos, nb);
+}
+
+CAMLprim value rx_queue_poll_cons(value vr, value vsock, value vtimeout,
+                                  value varr, value vpos, value vnb) {
+  return rx_queue_poll_cons_nat(vr, Int_val(vsock), Int_val(vtimeout), varr,
+                                Int_val(vpos), Int_val(vnb));
 }
 
 CAMLprim value umem_create(value vmem, value vsize, value vconfig) {
@@ -303,39 +367,33 @@ CAMLprim value socket_delete(value vsocket) {
 
 CAMLprim value socket_fd(value vsock) {
   struct xsk_socket *sock;
+  int fd;
   CAMLparam1(vsock);
 
   sock = Socket_ptr_val(vsock);
+  fd = xsk_socket__fd(sock);
+  if (fd < 0) {
+    raise_errno(-fd);
+  }
 
-  CAMLreturn(Val_int(xsk_socket__fd(sock)));
+  CAMLreturn(Val_int(fd));
 }
 
-CAMLprim value socket_kick_tx(value vsock) {
+CAMLprim value socket_sendto_nat(intnat sock) {
   int ret;
 
-  ret = sendto(Int_val(vsock), NULL, 0, MSG_DONTWAIT, NULL, 0);
-  if (ret >= 0 || errno == ENOBUFS || errno == EAGAIN || errno == EBUSY)
+  ret = sendto(sock, NULL, 0, MSG_DONTWAIT, NULL, 0);
+  if (ret >= 0)
     return Val_unit;
+
+  if (errno != ENOBUFS && errno != EAGAIN && errno != EBUSY &&
+      errno != ENETDOWN) {
+    raise_errno(errno);
+  }
 
   return Val_unit;
 }
 
-CAMLprim value socket_poll_rx_nat(value vsock, intnat timeout) {
-  struct pollfd fd;
-  int ret;
-
-  fd.fd = Int_val(vsock);
-  fd.events = POLLIN;
-  ret = poll(&fd, 1, timeout);
-  if (ret <= 0)
-    return Val_false;
-
-  if (!(fd.revents & POLLIN))
-    return Val_false;
-
-  return Val_true;
-}
-
-CAMLprim value socket_poll_rx(value vsock, value vtimeout) {
-  return socket_poll_rx_nat(vsock, Int_val(vtimeout));
+CAMLprim value socket_sendto(value vsock) {
+  return socket_sendto_nat(Int_val(vsock));
 }

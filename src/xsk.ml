@@ -78,13 +78,11 @@ type umem
 type socket
 
 external needs_wakeup_stub : ring_prod -> bool = "ring_prod_needs_wakeup" [@@noalloc]
-external kick_tx_stub : Unix.file_descr -> unit = "socket_kick_tx" [@@noalloc]
 
-external socket_poll_rx_stub
-  :  Unix.file_descr
-  -> (int[@untagged])
-  -> bool
-  = "socket_poll_rx" "socket_poll_rx_nat"
+external socket_sendto_stub
+  :  (int[@untagged])
+  -> unit
+  = "socket_sendto" "socket_sendto_nat"
   [@@noalloc]
 
 module Comp_queue = struct
@@ -122,16 +120,25 @@ module Fill_queue = struct
     = "fill_queue_produce" "fill_queue_produce_nat"
     [@@noalloc]
 
+  external produce_and_wakeup_stub
+    :  ring_prod
+    -> (int[@untagged])
+    -> (int[@untagged])
+    -> int array
+    -> (int[@untagged])
+    -> (int[@untagged])
+    -> (int[@untagged])
+    = "fill_queue_produce_and_wakeup" "fill_queue_produce_and_wakeup_nat"
+    [@@noalloc]
+
   let produce t arr ~pos ~nb =
     ignore (arr.(pos + nb - 1) : int);
     produce_stub t arr pos nb
   ;;
 
-  let produce_and_kick t fd arr ~pos ~nb =
+  let produce_and_wakeup_kernel t (fd : Unix.file_descr) arr ~pos ~nb =
     ignore (arr.(pos + nb - 1) : int);
-    let ret = produce_stub t arr pos nb in
-    if ret > 0 && needs_wakeup t then kick_tx_stub fd;
-    ret
+    produce_and_wakeup_stub t (Obj.magic fd) 1000 arr pos nb
   ;;
 end
 
@@ -155,10 +162,10 @@ module Tx_queue = struct
     produce_stub t arr pos nb
   ;;
 
-  let produce_and_kick t fd arr ~pos ~nb =
+  let produce_and_wakeup_kernel t (fd : Unix.file_descr) arr ~pos ~nb =
     ignore (arr.(pos + nb - 1) : Desc.t);
     let ret = produce_stub t arr pos nb in
-    if ret > 0 && needs_wakeup t then kick_tx_stub fd;
+    if ret > 0 && needs_wakeup t then socket_sendto_stub (Obj.magic fd);
     ret
   ;;
 end
@@ -169,7 +176,7 @@ module Rx_queue = struct
   let create ring = ring
 
   external consume_stub
-    :  ring_cons
+    :  t
     -> Desc.t array
     -> (int[@untagged])
     -> (int[@untagged])
@@ -177,17 +184,26 @@ module Rx_queue = struct
     = "rx_queue_cons" "rx_queue_cons_nat"
     [@@noalloc]
 
+  external poll_and_consume_stub
+    :  t
+    -> (int[@untagged])
+    -> (int[@untagged])
+    -> Desc.t array
+    -> (int[@untagged])
+    -> (int[@untagged])
+    -> (int[@untagged])
+    = "rx_queue_poll_cons" "rx_queue_poll_cons_nat"
+    [@@noalloc]
+
   let consume t arr ~pos ~nb =
     ignore (arr.(pos + nb - 1) : Desc.t);
     consume_stub t arr pos nb
   ;;
 
-  let poll_and_consume t fd timeout arr ~pos ~nb =
-    if pos + nb > Array.length arr
-    then 0
-    else if socket_poll_rx_stub fd timeout
-    then consume_stub t arr pos nb
-    else 0
+  let poll_and_consume t (fd : Unix.file_descr) timeout arr ~pos ~nb =
+    ignore (arr.(pos + nb - 1) : Desc.t);
+    let ret = poll_and_consume_stub t (Obj.magic fd) timeout arr pos nb in
+    if ret < 0 then None else Some ret
   ;;
 end
 
@@ -336,5 +352,5 @@ module Socket = struct
   external fd_stub : socket -> Unix.file_descr = "socket_fd"
 
   let fd t = fd_stub t.sock
-  let kick_tx t = kick_tx_stub (fd t)
+  let wakeup_kernel_with_sendto t = socket_sendto_stub (Obj.magic (fd t))
 end
