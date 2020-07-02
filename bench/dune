@@ -1,0 +1,5 @@
+(executable
+ (name bench)
+ (libraries core cstruct xsk)
+ (preprocess
+  (pps ppx_jane ppx_cstruct)))
