@@ -6,6 +6,8 @@ module Desc = struct
     ; mutable len : int
     ; mutable options : int
     }
+
+  let create () = { addr = 0; len = 0; options = 0 }
 end
 
 exception Xsk_C_Failure of int
