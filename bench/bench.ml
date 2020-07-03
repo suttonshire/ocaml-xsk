@@ -96,17 +96,17 @@ let tx (_ : string) (_ : int) (_ : int) = ()
 
 let xdp_flags mode =
   match mode with
-  | Some flag -> [ flag ]
-  | None -> [ Xsk.Xdp_flag.XDP_FLAGS_DRV_MODE ]
+  | Some flag -> [ flag; Xsk.Xdp_flag.XDP_FLAGS_UPDATE_IF_NOEXIST ]
+  | None -> [ Xsk.Xdp_flag.XDP_FLAGS_DRV_MODE; Xsk.Xdp_flag.XDP_FLAGS_UPDATE_IF_NOEXIST ]
 ;;
 
 let bind_flags zero_copy needs_wakeup =
   (* Default bind flags are XDP_COPY *)
   match zero_copy, needs_wakeup with
   | None, None -> [ Xsk.Bind_flag.XDP_COPY ]
-  | Some zc, None -> [ zc ]
-  | None, Some nw -> [ nw; Xsk.Bind_flag.XDP_COPY ]
-  | Some zc, Some nw -> [ zc; nw ]
+  | Some zc, None -> [ zc; ]
+  | None, Some nw -> [ nw; ]
+  | Some zc, Some nw -> [ zc; nw ; ]
 ;;
 
 let command =
