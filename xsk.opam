@@ -15,5 +15,8 @@ depends: [
   "ppx_cstruct" {with-test}
   "ppx_expect" {with-test}
 ]
-build: ["dune" "build" "-j" jobs "@install"]
+build: [
+  ["dune" "build" "-j" jobs "@install"] {build}
+  ["dune" "runtest" "--profile=test"] {with-test}
+]
 dev-repo: "git+https://github.com/suttonshire/ocaml-xsk.git"
