@@ -97,7 +97,7 @@ let tx (_ : string) (_ : int) (_ : int) = ()
 let xdp_flags mode =
   match mode with
   | Some flag -> [ flag ]
-  | None -> [ Xsk.Xdp_flag.XDP_FLAGS_SKB_MODE ]
+  | None -> [ Xsk.Xdp_flag.XDP_FLAGS_DRV_MODE ]
 ;;
 
 let bind_flags zero_copy needs_wakeup =
