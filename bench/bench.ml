@@ -51,6 +51,7 @@ let do_rx_drop
     rx
     (_ : Xsk.Tx_queue.t)
     frame_size
+    count
   =
   (* Populate the fill queue *)
   let addrs = Array.init frame_count ~f:(fun i -> i * frame_size) in
@@ -68,9 +69,9 @@ let do_rx_drop
     Or_error.error_string error_string)
   else (
     let fd = Xsk.Socket.fd socket in
-    let rec loop () =
+    let rec loop remaining =
       match Xsk.Rx_queue.poll_and_consume rx fd 1000 descs ~pos:0 ~nb:batch_size with
-      | None -> loop ()
+      | None -> loop (remaining)
       | Some rcvd ->
         Stdio.print_endline "got something!";
         unsafe_iteri_upto descs rcvd ~f:(fun i desc -> Array.unsafe_set addrs i desc.addr);
@@ -80,10 +81,14 @@ let do_rx_drop
         while !filled <> rcvd do
           filled := Xsk.Fill_queue.produce_and_wakeup_kernel fill fd addrs ~pos:0 ~nb:rcvd
         done;
-        loop ()
+        loop (remaining - 1)
     in
-    ignore (loop () : unit);
-    failwith "Inconceivable!")
+    let tick = Time_ns.now () in
+    (loop count : unit);
+    let tock = Time_ns.now () in
+    let dur = Time_ns.diff tock tick |> Time_ns.Span.to_string_hum in
+    Stdio.printf "Dropped %d frames in %s" count dur;
+    Or_error.return "done")
 ;;
 
 let rxdrop bind_flags xdp_flags interface queue frame_size =
@@ -131,7 +136,7 @@ let command =
         let xdpf = xdp_flags None in
         match bench with
         | "rxdrop" ->
-          rxdrop bf xdpf interface queue frame_size
+          rxdrop bf xdpf interface queue frame_size 1_000_000
           |> Or_error.sexp_of_t String.sexp_of_t
           |> Stdio.eprint_s
         | "tx" -> tx interface queue frame_size
