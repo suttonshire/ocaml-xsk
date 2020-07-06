@@ -1,5 +1,5 @@
 (executable
- (name bench)
+ (name rxdrop)
  (libraries core cstruct xsk)
  (preprocess
   (pps ppx_jane ppx_cstruct)))

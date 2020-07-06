@@ -119,8 +119,7 @@ let command =
     ~summary:""
     Command.Let_syntax.(
       let open Command.Param in
-      let%map bench = anon ("bench" %: string)
-      and interface = flag "-d" (required string) ~doc:"The device"
+      let%map interface = flag "-d" (required string) ~doc:"The device"
       and queue = flag "-q" (required int) ~doc:"The flag"
       and frame_size = flag "-f" (optional_with_default 2048 int) ~doc:"Frame size"
       and zero_copy =
@@ -134,13 +133,9 @@ let command =
       fun () ->
         let bf = bind_flags zero_copy needs_wakeup in
         let xdpf = xdp_flags None in
-        match bench with
-        | "rxdrop" ->
           rxdrop bf xdpf interface queue frame_size 1_000_000
           |> Or_error.sexp_of_t String.sexp_of_t
-          |> Stdio.eprint_s
-        | "tx" -> tx interface queue frame_size
-        | _ -> Stdio.printf "Invalid benchmark %s" bench)
+          |> Stdio.eprint_s)
 ;;
 
 let () = Command.run command
