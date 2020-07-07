@@ -26,6 +26,7 @@ type%cstruct ipv4 =
 let mac_of_string str =
   str
   |> String.split ~on:':'
+  |> List.map ~f:(fun s -> String.concat ["0x"; s])
   |> List.map ~f:Int.of_string
   |> List.map ~f:Char.of_int_exn
   |> String.of_char_list
