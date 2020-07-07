@@ -98,6 +98,7 @@ let with_umem frame_size ~f =
 ;;
 
 let tx cnt frame_size comp_queue socket txq =
+  Stdio.printf "Starting pkt get test\n";
   let fd = Xsk.Socket.fd socket in
   let batch_size = Int.min 64 cnt in
   let descs =
@@ -119,6 +120,7 @@ let tx cnt frame_size comp_queue socket txq =
       for i = 0 to consumed do
         (Array.unsafe_get descs i).addr <- Array.unsafe_get addrs i
       done;
+      Stdio.printf "Consumed: %d\n" consumed;
       let to_consume = to_consume - consumed in
       (* If there is less than a batch size outstanding and there is more to send *)
       if to_consume < batch_size && to_send > 0
@@ -126,6 +128,7 @@ let tx cnt frame_size comp_queue socket txq =
         let sent =
           Xsk.Tx_queue.produce_and_wakeup_kernel txq fd descs ~pos:0 ~nb:consumed
         in
+        Stdio.printf "Sent: %d\n" sent;
         loop (to_consume + sent) (to_send - sent))
       else ())
   in
