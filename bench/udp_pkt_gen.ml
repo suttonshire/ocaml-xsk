@@ -131,7 +131,7 @@ let tx cnt frame_size comp_queue socket txq =
         in
         Stdio.printf "Sent: %d\n" sent;
         loop (to_consume + sent) (to_send - sent))
-      else ())
+      else loop to_consume to_send)
   in
   loop sent (cnt - sent)
 ;;
