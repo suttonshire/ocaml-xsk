@@ -1,5 +1,5 @@
-(executable
- (name rxdrop)
+(executables
+ (names rxdrop udp_pkt_gen)
  (libraries core cstruct xsk)
  (preprocess
   (pps ppx_jane ppx_cstruct)))
