@@ -71,7 +71,7 @@ let do_rx_drop
     let fd = Xsk.Socket.fd socket in
     let rec loop remaining =
       match Xsk.Rx_queue.poll_and_consume rx fd 1000 descs ~pos:0 ~nb:batch_size with
-      | None -> loop (remaining)
+      | None -> loop remaining
       | Some rcvd ->
         Stdio.print_endline "got something!";
         unsafe_iteri_upto descs rcvd ~f:(fun i desc -> Array.unsafe_set addrs i desc.addr);
@@ -99,19 +99,19 @@ let rxdrop bind_flags xdp_flags interface queue frame_size =
 
 let tx (_ : string) (_ : int) (_ : int) = ()
 
-let xdp_flags mode =
+let make_xdp_flags mode =
   match mode with
   | Some flag -> [ flag; Xsk.Xdp_flag.XDP_FLAGS_UPDATE_IF_NOEXIST ]
   | None -> [ Xsk.Xdp_flag.XDP_FLAGS_DRV_MODE; Xsk.Xdp_flag.XDP_FLAGS_UPDATE_IF_NOEXIST ]
 ;;
 
-let bind_flags zero_copy needs_wakeup =
-  (* Default bind flags are XDP_COPY *)
+let make_bind_flags zero_copy needs_wakeup =
+  (* Default bind flags are [ XDP_COPY ] *)
   match zero_copy, needs_wakeup with
   | None, None -> [ Xsk.Bind_flag.XDP_COPY ]
-  | Some zc, None -> [ zc; ]
-  | None, Some nw -> [ nw; ]
-  | Some zc, Some nw -> [ zc; nw ; ]
+  | Some zc, None -> [ zc ]
+  | None, Some nw -> [ nw ]
+  | Some zc, Some nw -> [ zc; nw ]
 ;;
 
 let command =
@@ -131,11 +131,11 @@ let command =
           ~doc:"Use the needs wake up flag"
       in
       fun () ->
-        let bf = bind_flags zero_copy needs_wakeup in
-        let xdpf = xdp_flags None in
-          rxdrop bf xdpf interface queue frame_size 1_000_000
-          |> Or_error.sexp_of_t String.sexp_of_t
-          |> Stdio.eprint_s)
+        let bf = make_bind_flags zero_copy needs_wakeup in
+        let xdpf = make_xdp_flags None in
+        rxdrop bf xdpf interface queue frame_size 1_000_000
+        |> Or_error.sexp_of_t String.sexp_of_t
+        |> Stdio.eprint_s)
 ;;
 
 let () = Command.run command
