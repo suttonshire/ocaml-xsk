@@ -397,3 +397,53 @@ CAMLprim value socket_sendto_nat(intnat sock) {
 CAMLprim value socket_sendto(value vsock) {
   return socket_sendto_nat(Int_val(vsock));
 }
+
+CAMLprim value socket_pollin_nat(intnat sock, intnat timeout) {
+  struct pollfd fd;
+  int ret;
+
+  fd.fd = sock;
+  fd.events = POLLIN;
+  ret = poll(&fd, 1, timeout);
+  if (ret < 0) {
+    if (errno != EINTR) {
+      raise_errno(errno);
+    } else {
+      return Val_false;
+    }
+  }
+
+  if (!(fd.revents & POLLIN))
+    return Val_false;
+
+  return Val_true;
+}
+
+CAMLprim value socket_pollin(value vsock, value vtimeout) {
+  return socket_pollin_nat(Int_val(vsock), Int_val(vtimeout));
+}
+
+CAMLprim value socket_pollout_nat(intnat sock, intnat timeout) {
+  struct pollfd fd;
+  int ret;
+
+  fd.fd = sock;
+  fd.events = POLLOUT;
+  ret = poll(&fd, 1, timeout);
+  if (ret < 0) {
+    if (errno != EINTR) {
+      raise_errno(errno);
+    } else {
+      return Val_false;
+    }
+  }
+
+  if (!(fd.revents & POLLOUT))
+    return Val_false;
+
+  return Val_true;
+}
+
+CAMLprim value socket_pollout(value vsock, value vtimeout) {
+  return socket_pollout_nat(Int_val(vsock), Int_val(vtimeout));
+}
