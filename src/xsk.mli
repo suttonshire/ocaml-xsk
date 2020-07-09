@@ -1,5 +1,8 @@
+(** Xsk is a wrapper around the libbpf AF_XDP socket interface. *)
+
+(** A buffer is an page-aligned array of bytes that is passed to the kernel and associated
+    with a UMEM data structure. *)
 type buffer = (char, Bigarray.int8_unsigned_elt, Bigarray.c_layout) Bigarray.Array1.t
-(**  *)
 
 module Desc : sig
   type t =
@@ -7,11 +10,17 @@ module Desc : sig
     ; mutable len : int
     ; mutable options : int
     }
+
+  val create : unit -> t
 end
 
+(** [Xsk_C_Failure errno] is returned when libbpf returns an error. [errno] contains the
+    integer errno of the error *)
 exception Xsk_C_Failure of int
 
-(* src/libbpf_c/libbpf/include/uapi/linux/if_xdp.h *)
+(** Flags passed to [Umem.create] to configure a UMEM. The tags of the variant map to flag
+    of the same name documented in the {{:
+    src/libbpf_c/libbpf/include/uapi/linux/if_xdp.h}source} *)
 module Umem_flag : sig
   type t = XDP_UMEM_UNALIGNED_CHUNK_FLAG
 end
@@ -168,4 +177,6 @@ module Socket : sig
   val delete : t -> unit
   val fd : t -> Unix.file_descr
   val wakeup_kernel_with_sendto : t -> unit
+  val pollin : t -> int -> bool
+  val pollout : t -> int -> bool
 end
