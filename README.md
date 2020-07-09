@@ -4,7 +4,11 @@
 
 This is an OCaml to the XSK interface of libbpf. XSK is a simplified inteface to the linux specific AF_XDP sockets. The best introduction to AF_XDP sockets is from the kernel [documentation](https://github.com/torvalds/linux/blob/master/Documentation/networking/af_xdp.rst).
 
-[libbpf](https://github.com/libbpf/libbpf) is a submodule to this repo. We use the v0.0.8 tag. libbpf depends on the libelf, zlib packages so you should install those on your system.
+[libbpf](https://github.com/libbpf/libbpf) is a submodule to this repo. We use the v0.0.8 tag. libbpf depends on libelf and  zlib so you should install those on your system. e.g. on Ubuntu:
+
+```bash
+sudo apt-get install -y libelf-dev zlib1g-dev
+```
 
 ## Running tests
 
