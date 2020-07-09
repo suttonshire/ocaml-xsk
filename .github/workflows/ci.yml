@@ -30,12 +30,9 @@ jobs:
            sudo opam switch ${{ matrix.ocaml-version }}
            sudo opam init -y
            sudo opam upgrade -y
-           sudo opam install -y base dune ppx_expect base_bigstring ppx_cstruct cstruct expect_test_helpers_kernel core
+           sudo opam install -y base dune ppx_expect base_bigstring ppx_cstruct cstruct expect_test_helpers_kernel
            sudo opam pin add xsk.dev -y .
            sudo opam install -t . --deps-only
-    - name: Build tests
-      run: |
-           sudo opam exec -- dune build
     - name: Run tests
       run: |
            sudo XSK_TEST_DEPS_DIR=$XSK_TEST_DEPS_DIR XSK_TEST_INTF_NAME=$XSK_TEST_INTF_NAME XSK_TEST_INTF_MAC=$XSK_TEST_INTF_MAC XSK_ECHO_INTF_NAME=$XSK_ECHO_INTF_NAME XSK_ECHO_INTF_MAC=$XSK_ECHO_INTF_MAC opam exec -- dune runtest
