@@ -2,6 +2,16 @@
 
 # ocaml-xsk
 
-An OCaml wrapper to the XSK interface of libbpf
+This is an OCaml to the XSK interface of libbpf. XSK is a simplified inteface to the linux specific AF_XDP sockets. The best introduction to AF_XDP sockets is from the kernel [documentation](https://github.com/torvalds/linux/blob/master/Documentation/networking/af_xdp.rst).
 
-dependencies: libelf, zlib
+[libbpf](https://github.com/libbpf/libbpf) is a submodule to this repo. We use the v0.0.8 tag. libbpf depends on the libelf, zlib packages so you should install those on your system.
+
+## Running tests
+
+The tests require root permissions in order to configure network interfaces. In order to avoid setting up a root OCaml environment and messing with network configs on development machines, a Dockerfile is provided to run tests in a container. You'll have to run the container with the privileged flag set. You can run the test like this:
+
+```bash
+sudo docker build . -t test && docker run -it --privileged test
+```
+
+AF_XDP is a fast moving interface under very active development by the kernel team. As such many features supported in ocaml-xsk only work on the latest linux kernels. We've tested this interface on kernels > 5.4.
