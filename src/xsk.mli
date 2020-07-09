@@ -4,6 +4,11 @@
     with a UMEM data structure. *)
 type buffer = (char, Bigarray.int8_unsigned_elt, Bigarray.c_layout) Bigarray.Array1.t
 
+(** A [Desc.t] corresponds to a struct xdp_desc as defined in
+    libbpf/include/uapi/linux/if_xdp.h. A [Desc.t] points to the location and size of
+    packet packet data. A [Desc.t] is passed between kernel space and user space on the Rx
+    and Tx queues. The addr field is an byte offset into the buffer associated with the
+    UMEM where a packet starts. The len field is the length of packet data. *)
 module Desc : sig
   type t =
     { mutable addr : int
@@ -53,7 +58,8 @@ module Fill_queue : sig
   type t
 
   (** [needs_wakeup t] is true if the kernel needs to be woken up to consume from [t]. To
-      wake up the kernel to consume from the fill queue, [Xsk.poll] should be called.
+      wake up the kernel to consume from the fill queue,
+      [Xsk.Socket.wakeup_kernel_with_sendto] should be called.
 
       For more information see {{:
       https://github.com/torvalds/linux/blob/master/Documentation/networking/af_xdp.rst#xdp_use_need_wakeup-bind-flag
