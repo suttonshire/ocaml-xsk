@@ -95,7 +95,7 @@ CAMLprim value umem_create(value vmem, value vsize, value vconfig) {
   struct xsk_umem *umem;
   struct xsk_ring_prod fill = {0};
   struct xsk_ring_cons comp = {0};
-  struct xsk_umem_config config;
+  struct xsk_umem_config config = {0};
   void *umem_area;
   unsigned long long size;
   int err;
@@ -112,10 +112,10 @@ CAMLprim value umem_create(value vmem, value vsize, value vconfig) {
 
   caml_release_runtime_system();
   err = xsk_umem__create(&umem, umem_area, size, &fill, &comp, &config);
+  caml_acquire_runtime_system();
   if (err < 0) {
     raise_errno(-err);
   }
-  caml_acquire_runtime_system();
 
   vfill = caml_alloc_custom(&ring_custom_ops, sizeof(fill), 0, 1);
   *Ring_prod_ptr_val(vfill) = fill;
@@ -161,7 +161,7 @@ CAMLprim value socket_create(value vifname, value vqueue_id, value vumem,
   struct xsk_umem *umem;
   struct xsk_ring_prod tx = {0};
   struct xsk_ring_cons rx = {0};
-  struct xsk_socket_config config;
+  struct xsk_socket_config config = {0};
   int err;
   CAMLparam4(vifname, vqueue_id, vumem, vconfig);
   CAMLlocal4(vsock, vrx, vtx, vret);
@@ -175,7 +175,9 @@ CAMLprim value socket_create(value vifname, value vqueue_id, value vumem,
   config.xdp_flags = Int_val(Field(vconfig, xdp_flags));
   config.bind_flags = Int_val(Field(vconfig, bind_flags));
 
+  caml_release_runtime_system();
   err = xsk_socket__create(&xsk, ifname, queue_id, umem, &rx, &tx, &config);
+  caml_acquire_runtime_system();
   if (err < 0) {
     raise_errno(-err);
   }
