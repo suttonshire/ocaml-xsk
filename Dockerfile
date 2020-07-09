@@ -17,7 +17,6 @@ RUN opam init --disable-sandboxing -y && opam update -y && \
 RUN opam install -y base dune ppx_jane base_bigstring ppx_cstruct cstruct expect_test_helpers_kernel
     
 COPY . /root
-RUN cd /root && eval $(opam env) && dune build --profile=test
-
+RUN cd /root && eval $(opam env)
 WORKDIR /root
 ENTRYPOINT [ "test/docker_run.sh" ]
