@@ -87,6 +87,20 @@ external socket_sendto_stub
   = "socket_sendto" "socket_sendto_nat"
   [@@noalloc]
 
+external socket_pollin_stub
+  :  (int[@untagged])
+  -> (int[@untagged])
+  -> bool
+  = "socket_pollin" "socket_pollin_nat"
+  [@@noalloc]
+
+external socket_pollout_stub
+  :  (int[@untagged])
+  -> (int[@untagged])
+  -> bool
+  = "socket_pollout" "socket_pollout_nat"
+  [@@noalloc]
+
 module Comp_queue = struct
   type t = ring_cons
 
@@ -167,7 +181,7 @@ module Tx_queue = struct
   let produce_and_wakeup_kernel t (fd : Unix.file_descr) arr ~pos ~nb =
     ignore (arr.(pos + nb - 1) : Desc.t);
     let ret = produce_stub t arr pos nb in
-    if ret > 0 && needs_wakeup t then socket_sendto_stub (Obj.magic fd);
+    if ret >= 0 && needs_wakeup t then socket_sendto_stub (Obj.magic fd);
     ret
   ;;
 end
@@ -355,4 +369,6 @@ module Socket = struct
 
   let fd t = fd_stub t.sock
   let wakeup_kernel_with_sendto t = socket_sendto_stub (Obj.magic (fd t))
+  let pollin t timeout = socket_pollin_stub (Obj.magic (fd t)) timeout
+  let pollout t timeout = socket_pollout_stub (Obj.magic (fd t)) timeout
 end

@@ -177,4 +177,6 @@ module Socket : sig
   val delete : t -> unit
   val fd : t -> Unix.file_descr
   val wakeup_kernel_with_sendto : t -> unit
+  val pollin : t -> int -> bool
+  val pollout : t -> int -> bool
 end
