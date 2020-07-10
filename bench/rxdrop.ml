@@ -70,6 +70,7 @@ let do_rx_drop
   else (
     let fd = Xsk.Socket.fd socket in
     let rec loop remaining =
+      if remaining = 0 then () else (
       match Xsk.Rx_queue.poll_and_consume rx fd 1000 descs ~pos:0 ~nb:batch_size with
       | None -> loop remaining
       | Some rcvd ->
@@ -81,7 +82,7 @@ let do_rx_drop
         while !filled <> rcvd do
           filled := Xsk.Fill_queue.produce_and_wakeup_kernel fill fd addrs ~pos:0 ~nb:rcvd
         done;
-        loop (remaining - 1)
+        loop (remaining - 1))
     in
     let tick = Time_ns.now () in
     (loop count : unit);
