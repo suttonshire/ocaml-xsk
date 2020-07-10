@@ -74,7 +74,7 @@ let do_rx_drop
       match Xsk.Rx_queue.poll_and_consume rx fd 1000 descs ~pos:0 ~nb:batch_size with
       | None -> loop remaining
       | Some rcvd ->
-        Stdio.print_endline "got something!";
+        Stdio.printf "got some %d\n" rcvd;
         unsafe_iteri_upto descs rcvd ~f:(fun i desc -> Array.unsafe_set addrs i desc.addr);
         let filled =
           ref (Xsk.Fill_queue.produce_and_wakeup_kernel fill fd addrs ~pos:0 ~nb:rcvd)
