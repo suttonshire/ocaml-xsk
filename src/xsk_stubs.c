@@ -249,7 +249,7 @@ CAMLprim value socket_pollin_nat(intnat sock, intnat timeout) {
   fd.fd = sock;
   fd.events = POLLIN;
   ret = poll(&fd, 1, timeout);
-  if (ret < 0) {
+  if (ret <= 0) {
     if (errno != EINTR) {
       raise_errno(errno);
     } else {
