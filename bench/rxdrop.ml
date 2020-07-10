@@ -91,10 +91,10 @@ let do_rx_drop
     Or_error.return "done")
 ;;
 
-let rxdrop bind_flags xdp_flags interface queue frame_size =
+let rxdrop bind_flags xdp_flags interface queue frame_size cnt =
   with_umem frame_size ~f:(fun umem fill comp ->
       with_socket bind_flags xdp_flags interface queue umem ~f:(fun socket rx tx ->
-          do_rx_drop umem fill comp socket rx tx frame_size))
+          do_rx_drop umem fill comp socket rx tx frame_size cnt))
 ;;
 
 let tx (_ : string) (_ : int) (_ : int) = ()
@@ -129,11 +129,13 @@ let command =
           "-w"
           (no_arg_some Xsk.Bind_flag.XDP_USE_NEED_WAKEUP)
           ~doc:"Use the needs wake up flag"
+      and cnt =
+        flag "-c" (optional_with_default 1_000_000 int) ~doc:"n How many packets to receive"
       in
       fun () ->
         let bf = make_bind_flags zero_copy needs_wakeup in
         let xdpf = make_xdp_flags None in
-        rxdrop bf xdpf interface queue frame_size 1_000_000
+        rxdrop bf xdpf interface queue frame_size cnt
         |> Or_error.sexp_of_t String.sexp_of_t
         |> Stdio.eprint_s)
 ;;

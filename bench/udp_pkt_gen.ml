@@ -210,7 +210,11 @@ let tx cnt frame_size cq socket txq =
       let consumed0 = Xsk.Comp_queue.consume cq addrs ~pos:0 ~nb:max_batch_size in
       loop sent (consumed + consumed0))
   in
-  loop 0 0
+  let tick = Time_ns.now () in
+  loop 0 0;
+  let tock = Time_ns.now () in
+  let dur = Time_ns.diff tock tick in
+  Stdio.printf "Sent %d packets in %s seconds" cnt (Time_ns.Span.to_string_hum dur)
 ;;
 
 let make_xdp_flags mode =
