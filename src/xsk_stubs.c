@@ -257,9 +257,6 @@ CAMLprim value socket_pollin_nat(intnat sock, intnat timeout) {
     }
   }
 
-  if (!(fd.revents & POLLIN))
-    return Val_false;
-
   return Val_true;
 }
 
