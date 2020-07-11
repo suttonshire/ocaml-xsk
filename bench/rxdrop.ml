@@ -32,17 +32,6 @@ let with_umem frame_size ~f =
   Exn.protect ~f:(fun () -> f umem fill comp) ~finally:(fun () -> Xsk.Umem.delete umem)
 ;;
 
-let unsafe_iteri_upto a upto ~f =
-  let rec loop i =
-    if i = upto
-    then ()
-    else (
-      f i (Array.unsafe_get a i);
-      loop (i + 1))
-  in
-  loop 0
-;;
-
 let do_rx_drop
     (_ : Xsk.Umem.t)
     fill
@@ -69,23 +58,24 @@ let do_rx_drop
     Or_error.error_string error_string)
   else (
     let fd = Xsk.Socket.fd socket in
-    let rec loop remaining =
+    let rec drop_loop remaining =
       if remaining = 0 then () else (
       match Xsk.Rx_queue.poll_and_consume rx fd 1000 descs ~pos:0 ~nb:batch_size with
-      | None -> loop remaining
+      | None -> drop_loop remaining
       | Some rcvd ->
-        Stdio.printf "got some %d\n" rcvd;
-        unsafe_iteri_upto descs rcvd ~f:(fun i desc -> Array.unsafe_set addrs i desc.addr);
+        for i = 0 to rcvd - 1 do
+          Array.unsafe_set addrs i (Array.unsafe_get descs i).addr
+        done;
         let filled =
           ref (Xsk.Fill_queue.produce_and_wakeup_kernel fill fd addrs ~pos:0 ~nb:rcvd)
         in
         while !filled <> rcvd do
           filled := Xsk.Fill_queue.produce_and_wakeup_kernel fill fd addrs ~pos:0 ~nb:rcvd
         done;
-        loop (remaining - rcvd))
+        drop_loop (remaining - rcvd))
     in
     let tick = Time_ns.now () in
-    (loop count : unit);
+    (drop_loop count : unit);
     let tock = Time_ns.now () in
     let dur = Time_ns.diff tock tick |> Time_ns.Span.to_string_hum in
     Stdio.printf "Dropped %d frames in %s" count dur;
