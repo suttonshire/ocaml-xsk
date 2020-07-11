@@ -243,7 +243,7 @@ CAMLprim value socket_sendto(value vsock) {
 }
 
 CAMLprim value socket_pollin_nat(intnat sock, intnat timeout) {
-  struct pollfd fd;
+  struct pollfd fd = {0};
   int ret;
 
   fd.fd = sock;
@@ -268,7 +268,7 @@ CAMLprim value socket_pollin(value vsock, value vtimeout) {
 }
 
 CAMLprim value socket_pollout_nat(intnat sock, intnat timeout) {
-  struct pollfd fd;
+  struct pollfd fd = {0};
   int ret;
 
   fd.fd = sock;
@@ -282,7 +282,7 @@ CAMLprim value socket_pollout_nat(intnat sock, intnat timeout) {
     }
   }
 
-  if (!(fd.revents & POLLOUT))
+  if (ret == 0)
     return Val_false;
 
   return Val_true;
