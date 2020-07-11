@@ -29,21 +29,22 @@ let with_umem frame_size ~f =
       { Config.default with frame_size; fill_size = frame_count; comp_size = frame_count }
   in
   let umem, fill, comp = Xsk.Umem.create mem (Bigstring.length mem) config in
-  Exn.protect ~f:(fun () -> f mem umem fill comp) ~finally:(fun () -> Xsk.Umem.delete umem)
+  Exn.protect
+    ~f:(fun () -> f mem umem fill comp)
+    ~finally:(fun () -> Xsk.Umem.delete umem)
 ;;
 
 let complete_tx addrs addrs_len sock fd tx fq cq =
-  if Xsk.Tx_queue.needs_wakeup tx then (
-    Xsk.Socket.wakeup_kernel_with_sendto sock
-  );
-
+  if Xsk.Tx_queue.needs_wakeup tx then Xsk.Socket.wakeup_kernel_with_sendto sock;
   let completed = Xsk.Comp_queue.consume cq addrs ~pos:0 ~nb:addrs_len in
-  if (completed <> 0) then (
-    let filled = ref (Xsk.Fill_queue.produce_and_wakeup_kernel fq fd addrs ~pos:0 ~nb:completed) in
+  if completed <> 0
+  then (
+    let filled =
+      ref (Xsk.Fill_queue.produce_and_wakeup_kernel fq fd addrs ~pos:0 ~nb:completed)
+    in
     while !filled <> completed do
-      filled := (Xsk.Fill_queue.produce_and_wakeup_kernel fq fd addrs ~pos:0 ~nb:completed)
-    done;
-  )
+      filled := Xsk.Fill_queue.produce_and_wakeup_kernel fq fd addrs ~pos:0 ~nb:completed
+    done)
 ;;
 
 let swap_mac_tmp = Bigstring.create 6
@@ -52,16 +53,9 @@ let swap_mac mem addr =
   Bigstring.unsafe_blit ~src:mem ~src_pos:addr ~dst:swap_mac_tmp ~dst_pos:0 ~len:6;
   Bigstring.unsafe_blit ~src:mem ~src_pos:(addr + 6) ~dst:mem ~dst_pos:addr ~len:6;
   Bigstring.unsafe_blit ~src:swap_mac_tmp ~src_pos:0 ~dst:mem ~dst_pos:(addr + 6) ~len:6
+;;
 
-let do_fwd
-    mem
-    fill
-    comp
-    socket
-    rx
-    tx
-    frame_size
-  =
+let do_fwd mem fill comp socket rx tx frame_size =
   (* Populate the fill queue *)
   let addrs = Array.init frame_count ~f:(fun i -> i * frame_size) in
   let filled = Xsk.Fill_queue.produce fill addrs ~pos:0 ~nb:frame_count in
@@ -82,15 +76,15 @@ let do_fwd
       complete_tx addrs frame_count socket fd tx fill comp;
       match Xsk.Rx_queue.poll_and_consume rx fd 1000 descs ~pos:0 ~nb:frame_count with
       | None -> fwd_loop ()
-      | Some rcvd -> (
+      | Some rcvd ->
         for i = 0 to rcvd - 1 do
-          swap_mac mem (Array.unsafe_get descs i).addr;
+          swap_mac mem (Array.unsafe_get descs i).addr
         done;
         let sent = ref 0 in
         while !sent <> rcvd do
-          sent := Xsk.Tx_queue.produce_and_wakeup_kernel tx fd descs ~pos:0 ~nb:frame_count;
+          sent
+            := Xsk.Tx_queue.produce_and_wakeup_kernel tx fd descs ~pos:0 ~nb:frame_count
         done
-      )
     in
     Or_error.return (fwd_loop ()))
 ;;
@@ -138,7 +132,6 @@ let command =
         match fwd bf xdpf interface queue frame_size with
         | Error _ -> ()
         | Ok () -> ())
-
 ;;
 
 let () = Command.run command

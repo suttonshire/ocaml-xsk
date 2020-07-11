@@ -59,20 +59,23 @@ let do_rx_drop
   else (
     let fd = Xsk.Socket.fd socket in
     let rec drop_loop remaining =
-      if remaining = 0 then () else (
-      match Xsk.Rx_queue.poll_and_consume rx fd 1000 descs ~pos:0 ~nb:batch_size with
-      | None -> drop_loop remaining
-      | Some rcvd ->
-        for i = 0 to rcvd - 1 do
-          Array.unsafe_set addrs i (Array.unsafe_get descs i).addr
-        done;
-        let filled =
-          ref (Xsk.Fill_queue.produce_and_wakeup_kernel fill fd addrs ~pos:0 ~nb:rcvd)
-        in
-        while !filled <> rcvd do
-          filled := Xsk.Fill_queue.produce_and_wakeup_kernel fill fd addrs ~pos:0 ~nb:rcvd
-        done;
-        drop_loop (remaining - rcvd))
+      if remaining = 0
+      then ()
+      else (
+        match Xsk.Rx_queue.poll_and_consume rx fd 1000 descs ~pos:0 ~nb:batch_size with
+        | None -> drop_loop remaining
+        | Some rcvd ->
+          for i = 0 to rcvd - 1 do
+            Array.unsafe_set addrs i (Array.unsafe_get descs i).addr
+          done;
+          let filled =
+            ref (Xsk.Fill_queue.produce_and_wakeup_kernel fill fd addrs ~pos:0 ~nb:rcvd)
+          in
+          while !filled <> rcvd do
+            filled
+              := Xsk.Fill_queue.produce_and_wakeup_kernel fill fd addrs ~pos:0 ~nb:rcvd
+          done;
+          drop_loop (remaining - rcvd))
     in
     let tick = Time_ns.now () in
     (drop_loop count : unit);
@@ -121,7 +124,10 @@ let command =
           (no_arg_some Xsk.Bind_flag.XDP_USE_NEED_WAKEUP)
           ~doc:"Use the needs wake up flag"
       and cnt =
-        flag "-c" (optional_with_default 1_000_000 int) ~doc:"n How many packets to receive"
+        flag
+          "-c"
+          (optional_with_default 1_000_000 int)
+          ~doc:"n How many packets to receive"
       in
       fun () ->
         let bf = make_bind_flags zero_copy needs_wakeup in
