@@ -96,7 +96,6 @@ let set_pkt ~src_mac ~dst_mac ~src_ip ~dst_ip pkt pos =
   set_udp4_src_port udp src_port;
   set_udp4_dst_port udp dst_port;
   set_udp4_len udp (sizeof_udp4 + data_len);
-  (* We don't set the csum for now *)
   set_udp4_csum udp 0;
   (* Create the data *)
   let buf = Cstruct.create data_len in
