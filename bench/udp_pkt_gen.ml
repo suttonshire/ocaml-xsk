@@ -145,7 +145,7 @@ let with_umem frame_size ~f =
 let send_batch batch_size frame_size send txq fd descs =
   for i = 0 to batch_size - 1 do
     let pos = (send + i) land (frame_count - 1) in
-    descs.(i).Xsk.Desc.addr <- pos * frame_size
+    (Array.unsafe_get descs i).Xsk.Desc.addr <- pos * frame_size
   done;
   let sent = ref 0 in
   while !sent = 0 do
@@ -181,17 +181,17 @@ let tx cnt frame_size cq socket txq =
     Array.init max_batch_size ~f:(fun i ->
         let desc = Xsk.Desc.create () in
         desc.addr <- frame_size * i;
-        desc.len <- 128;
+        desc.len <- sizeof_ethernet + sizeof_ipv4 + sizeof_udp4 + 8;
         desc)
   in
   let addrs = Array.create ~len:max_batch_size 0 in
-  let rec loop sent consumed =
+  let rec tx_loop sent consumed =
     (* If we've sent everything and consumed everything we are done *)
     if sent >= cnt && consumed >= sent
     then ()
     else if (* Wait for the socket to be writeable *)
             not (Xsk.Socket.pollout socket 100)
-    then loop sent consumed
+    then tx_loop sent consumed
     else (
       (* [tx_batch_size] is not more than the number of free frames remaining in the umem
        * and not more than the [max_batch_size]
@@ -208,10 +208,10 @@ let tx cnt frame_size cq socket txq =
           sent)
       in
       let consumed0 = Xsk.Comp_queue.consume cq addrs ~pos:0 ~nb:max_batch_size in
-      loop sent (consumed + consumed0))
+      tx_loop sent (consumed + consumed0))
   in
   let tick = Time_ns.now () in
-  loop 0 0;
+  tx_loop 0 0;
   let tock = Time_ns.now () in
   let dur = Time_ns.diff tock tick in
   Stdio.printf "Sent %d packets in %s seconds" cnt (Time_ns.Span.to_string_hum dur)
