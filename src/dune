@@ -6,5 +6,5 @@
  (foreign_stubs
   (language c)
   (include_dirs libbpf_c/libbpf/src libbpf_c/libbpf/include/uapi)
-  (flags :standard -Wall -Wextra -Werror -std=gnu11)
+  (flags :standard -Wall -Wextra -Werror -std=gnu11 -O3)
   (names xsk_stubs)))
