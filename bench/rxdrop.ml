@@ -46,7 +46,7 @@ let do_rx_drop
   let addrs = Array.init frame_count ~f:(fun i -> i * frame_size) in
   let filled = Xsk.Fill_queue.produce fill addrs ~pos:0 ~nb:frame_count in
   let batch_size = 64 in
-  let descs = Array.init batch_size ~f:(fun (_ : int) -> Xsk.Desc.create ()) in
+  let descs = Array.init frame_count ~f:(fun (_ : int) -> Xsk.Desc.create ()) in
   if filled <> frame_count
   then (
     let error_string =
@@ -59,12 +59,14 @@ let do_rx_drop
   else (
     let fd = Xsk.Socket.fd socket in
     let rec drop_loop remaining =
-      if remaining = 0
+      if remaining <= 0
       then ()
       else (
         match Xsk.Rx_queue.poll_and_consume rx fd 1000 descs ~pos:0 ~nb:batch_size with
-        | None -> drop_loop remaining
+        | None -> (
+          drop_loop remaining)
         | Some rcvd ->
+          if rcvd = 0 then (drop_loop (remaining - rcvd)) else (
           for i = 0 to rcvd - 1 do
             Array.unsafe_set addrs i (Array.unsafe_get descs i).addr
           done;
@@ -75,7 +77,7 @@ let do_rx_drop
             filled
               := Xsk.Fill_queue.produce_and_wakeup_kernel fill fd addrs ~pos:0 ~nb:rcvd
           done;
-          drop_loop (remaining - rcvd))
+          drop_loop (remaining - rcvd)))
     in
     let tick = Time_ns.now () in
     (drop_loop count : unit);
