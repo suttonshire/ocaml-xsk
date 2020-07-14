@@ -40,14 +40,17 @@ let do_rx_drop
     rx
     (_ : Xsk.Tx_queue.t)
     frame_size
-    count
+    upto
   =
   (* Populate the fill queue *)
   let addrs = Array.init frame_count ~f:(fun i -> i * frame_size) in
   let fd = Xsk.Socket.fd socket in
-  let filled = Xsk.Fill_queue.produce_and_wakeup_kernel fill fd addrs ~pos:0 ~nb:frame_count in
+  let filled =
+    Xsk.Fill_queue.produce_and_wakeup_kernel fill fd addrs ~pos:0 ~nb:frame_count
+  in
   let batch_size = 64 in
   let descs = Array.init frame_count ~f:(fun (_ : int) -> Xsk.Desc.create ()) in
+  let hist = Array.init 16 ~f:(fun (_ : int) -> Time_stamp_counter.zero) in
   if filled <> frame_count
   then (
     let error_string =
@@ -58,14 +61,20 @@ let do_rx_drop
     in
     Or_error.error_string error_string)
   else (
-    let rec drop_loop remaining =
-      if remaining <= 0
+    let rec drop_loop cnt =
+      (* Every 1024 * 1024 frames store the current time *)
+      if cnt land (1023 * 1024) = 0
+      then (
+        let pos = (cnt lsl 20) land 0xFF in
+        Array.unsafe_set hist pos (Time_stamp_counter.now ()));
+      if cnt >= upto
       then ()
       else (
         match Xsk.Rx_queue.consume rx descs ~pos:0 ~nb:batch_size with
-        | 0 -> (
-          if Xsk.Fill_queue.needs_wakeup fill then Xsk.Socket.wakeup_kernel_with_sendto socket;
-          drop_loop remaining)
+        | 0 ->
+          if Xsk.Fill_queue.needs_wakeup fill
+          then Xsk.Socket.wakeup_kernel_with_sendto socket;
+          drop_loop cnt
         | rcvd ->
           if rcvd < 0 then failwith "fuckup";
           for i = 0 to rcvd - 1 do
@@ -78,14 +87,29 @@ let do_rx_drop
             filled
               := Xsk.Fill_queue.produce_and_wakeup_kernel fill fd addrs ~pos:0 ~nb:rcvd
           done;
-          drop_loop (remaining - rcvd))
+          drop_loop (cnt + rcvd))
     in
-    let tick = Time_ns.now () in
-    (drop_loop count : unit);
-    let tock = Time_ns.now () in
-    let dur = Time_ns.diff tock tick |> Time_ns.Span.to_string_hum in
-    Stdio.printf "Dropped %d frames in %s" count dur;
-    Or_error.return "done")
+    (drop_loop 0 : unit);
+    let last =
+      Array.findi hist ~f:(fun (_ : int) t -> Time_stamp_counter.(equal t zero))
+    in
+    let res =
+      match last with
+      | None -> Some (hist.(0), Array.last hist, 0)
+      | Some (pos, (_ : Time_stamp_counter.t)) ->
+        if pos = 0 then None else Some (hist.(0), hist.(pos - 1), (pos + 1) * 1024 * 1024)
+    in
+    (match res with
+    | Some (tick, tock, total) ->
+      let dur = Time_stamp_counter.diff tick tock in
+      let dur =
+        Time_stamp_counter.Span.to_time_span
+          dur
+          ~calibrator:(Lazy.force Time_stamp_counter.calibrator)
+      in
+      Stdio.printf "Dropped %d frames in %s\n" total (Time.Span.to_string_hum dur)
+    | None -> Stdio.print_endline "Not enough data for stats");
+    Or_error.return ())
 ;;
 
 let rxdrop bind_flags xdp_flags interface queue frame_size cnt =
@@ -136,7 +160,7 @@ let command =
         let bf = make_bind_flags zero_copy needs_wakeup in
         let xdpf = make_xdp_flags None in
         rxdrop bf xdpf interface queue frame_size cnt
-        |> Or_error.sexp_of_t String.sexp_of_t
+        |> Or_error.sexp_of_t Unit.sexp_of_t
         |> Stdio.eprint_s)
 ;;
 
