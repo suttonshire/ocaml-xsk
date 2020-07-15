@@ -45,7 +45,6 @@ module Hist = struct
 
   let create () =
     let hist = Array.init 16 ~f:(fun (_ : int) -> Time_stamp_counter.zero) in
-    hist.(0) <- Time_stamp_counter.now ();
     { hist; cnt = 0; bin = 0 }
   ;;
 
@@ -60,20 +59,24 @@ module Hist = struct
   ;;
 
   let print t =
-    let ticki =
-      Array.foldi t.hist ~init:0 ~f:(fun i j _ ->
-          if Time_stamp_counter.(t.hist.(i) < t.hist.(j)) then i else j)
-    in
-    let tocki =
-      Array.foldi t.hist ~init:0 ~f:(fun i j _ ->
-          if Time_stamp_counter.(t.hist.(i) > t.hist.(j)) then i else j)
-    in
-    let tick = t.hist.(ticki) in
-    let tock = t.hist.(tocki) in
-    if Time_stamp_counter.(tock <= tick)
+    (* Most recent timestamp *)
+    let tock = t.hist.(t.bin) in
+    let tick_pos = ref t.bin in
+    let bin_span = ref 0 in
+    for i = 0 to bins - 1 do
+      let pos = (!tick_pos - i) land bin_mask in
+      if Time_stamp_counter.(t.hist.(pos) > zero)
+         && Time_stamp_counter.(t.hist.(pos) < tock)
+      then (
+        tick_pos := pos;
+        bin_span := !bin_span + 1)
+      else ()
+    done;
+    let tick = t.hist.(!tick_pos) in
+    if Time_stamp_counter.(tock <= tick) || !bin_span < 2
     then Stdio.print_endline "Not enough info"
     else (
-      let packets = Int.to_float (bin_size * Int.abs (tocki - ticki)) in
+      let packets = Int.to_float (bin_size * (!bin_span - 1)) in
       let dur =
         Int63.to_float
           Time_stamp_counter.(
