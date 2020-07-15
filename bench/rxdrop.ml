@@ -55,7 +55,7 @@ module Hist = struct
       let tsc = Time_stamp_counter.now () in
       t.bin <- (t.bin + 1) land bin_mask;
       Array.unsafe_set t.hist t.bin tsc)
-    else t.cnt <- t.cnt + 1
+    else t.cnt <- t.cnt + amount
   ;;
 
   let print t =
@@ -76,13 +76,13 @@ module Hist = struct
     if Time_stamp_counter.(tock <= tick) || !bin_span < 2
     then Stdio.print_endline "Not enough info"
     else (
-      let packets = Int.to_float (bin_size * (!bin_span - 1)) in
+      let packets = Int.to_float (bin_size * (!bin_span)) in
       let dur =
         Int63.to_float
           Time_stamp_counter.(
             Span.to_ns (diff tock tick) ~calibrator:(Lazy.force calibrator))
       in
-      let rate = packets /. dur *. 1_000_000_000.0 in
+      let rate = packets /. (dur /. 1_000_000_000.0) in
       Stdio.printf "Processed %f packets in %f ns. Rate %f\n" packets dur rate)
   ;;
 end
