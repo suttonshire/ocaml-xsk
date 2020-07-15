@@ -22,14 +22,14 @@ let with_umem frame_size ~f =
   let mem =
     Exn.protect
       ~f:(fun () -> Bigstring.map_file ~shared:true fd (frame_count * frame_size))
-      ~finally:(fun () -> Unix.unlink tmp_filename)
+      ~finally:(fun () -> Unix.close fd; Unix.unlink tmp_filename)
   in
   let config =
     Xsk.Umem.
       { Config.default with frame_size; fill_size = frame_count; comp_size = frame_count }
   in
   let umem, fill, comp = Xsk.Umem.create mem (Bigstring.length mem) config in
-  Exn.protect ~f:(fun () -> f umem fill comp) ~finally:(fun () -> Xsk.Umem.delete umem)
+  Exn.protect ~f:(fun () -> f mem umem fill comp) ~finally:(fun () -> Xsk.Umem.delete umem)
 ;;
 
 module Hist = struct
@@ -88,6 +88,7 @@ module Hist = struct
 end
 
 let do_rx_drop
+    mem
     (_ : Xsk.Umem.t)
     fill
     (_ : Xsk.Comp_queue.t)
@@ -129,7 +130,11 @@ let do_rx_drop
         | rcvd ->
           if rcvd < 0 then failwith "fuckup";
           for i = 0 to rcvd - 1 do
-            Array.unsafe_set addrs i (Array.unsafe_get descs i).addr
+            let desc = Array.unsafe_get descs i in
+            Array.unsafe_set addrs i desc.addr;
+            if desc.len >= 8 then (
+              ignore (Bigstring.unsafe_get_int64_le_trunc mem ~pos:desc.addr : int)
+            )
           done;
           Hist.incr hist rcvd;
           let filled =
@@ -147,9 +152,9 @@ let do_rx_drop
 ;;
 
 let rxdrop bind_flags xdp_flags interface queue frame_size cnt =
-  with_umem frame_size ~f:(fun umem fill comp ->
+  with_umem frame_size ~f:(fun mem umem fill comp ->
       with_socket bind_flags xdp_flags interface queue umem ~f:(fun socket rx tx ->
-          do_rx_drop umem fill comp socket rx tx frame_size cnt))
+          do_rx_drop mem umem fill comp socket rx tx frame_size cnt))
 ;;
 
 let tx (_ : string) (_ : int) (_ : int) = ()
