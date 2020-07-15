@@ -38,13 +38,13 @@ module Hist = struct
   let bin_size = 1024 * 1024
 
   type t =
-    { hist : Time_stamp_counter.t Array.t
+    { hist : Time_ns.t Array.t
     ; mutable cnt : int
     ; mutable bin : int
     }
 
   let create () =
-    let hist = Array.init 16 ~f:(fun (_ : int) -> Time_stamp_counter.zero) in
+    let hist = Array.init 16 ~f:(fun (_ : int) -> Time_ns.min_value_representable) in
     { hist; cnt = 0; bin = 0 }
   ;;
 
@@ -52,7 +52,7 @@ module Hist = struct
     if t.cnt + amount > bin_size
     then (
       t.cnt <- t.cnt + amount - bin_size;
-      let tsc = Time_stamp_counter.now () in
+      let tsc = Time_ns.now () in
       t.bin <- (t.bin + 1) land bin_mask;
       Array.unsafe_set t.hist t.bin tsc)
     else t.cnt <- t.cnt + amount
@@ -65,25 +65,25 @@ module Hist = struct
     let bin_span = ref 0 in
     for i = 0 to bins - 1 do
       let pos = (!tick_pos - i) land bin_mask in
-      if Time_stamp_counter.(t.hist.(pos) > zero)
-         && Time_stamp_counter.(t.hist.(pos) < tock)
+      Stdio.print_s (Time_ns.sexp_of_t t.hist.(pos));
+      if Time_ns.(t.hist.(pos) > min_value_representable)
+         && Time_ns.(t.hist.(pos) < tock)
       then (
         tick_pos := pos;
         bin_span := !bin_span + 1)
       else ()
     done;
     let tick = t.hist.(!tick_pos) in
-    if Time_stamp_counter.(tock <= tick) || !bin_span < 2
+    if Time_ns.(tock <= tick) || !bin_span < 1
     then Stdio.print_endline "Not enough info"
     else (
       let packets = Int.to_float (bin_size * (!bin_span)) in
       let dur =
-        Int63.to_float
-          Time_stamp_counter.(
-            Span.to_ns (diff tock tick) ~calibrator:(Lazy.force calibrator))
+        Time_ns.Span.to_sec
+          (Time_ns.diff tock tick)
       in
-      let rate = packets /. (dur /. 1_000_000_000.0) in
-      Stdio.printf "Processed %f packets in %f ns. Rate %f\n" packets dur rate)
+      let rate = packets /. dur in
+      Stdio.printf "Processed %f packets in %f s. Rate %f\n" packets dur rate)
   ;;
 end
 
