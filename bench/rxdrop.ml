@@ -49,12 +49,12 @@ module Hist = struct
   ;;
 
   let incr t amount =
-    if t.cnt + amount > bin_size
+    if t.cnt + amount >= bin_size
     then (
       t.cnt <- t.cnt + amount - bin_size;
       let tsc = Time_ns.now () in
-      t.bin <- (t.bin + 1) land bin_mask;
-      Array.unsafe_set t.hist t.bin tsc)
+      Array.unsafe_set t.hist t.bin tsc;
+      t.bin <- (t.bin + 1) land bin_mask)
     else t.cnt <- t.cnt + amount
   ;;
 
