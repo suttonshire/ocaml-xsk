@@ -32,6 +32,58 @@ let with_umem frame_size ~f =
   Exn.protect ~f:(fun () -> f umem fill comp) ~finally:(fun () -> Xsk.Umem.delete umem)
 ;;
 
+module Hist = struct
+  let bins = 16
+  let bin_mask = bins - 1
+  let bin_size = 1024 * 1024
+
+  type t =
+    { hist : Time_stamp_counter.t Array.t
+    ; mutable cnt : int
+    ; mutable bin : int
+    }
+
+  let create () =
+    let hist = Array.init 16 ~f:(fun (_ : int) -> Time_stamp_counter.zero) in
+    hist.(0) <- Time_stamp_counter.now ();
+    { hist; cnt = 0; bin = 0 }
+  ;;
+
+  let incr t amount =
+    if t.cnt + amount > bin_size
+    then (
+      t.cnt <- t.cnt + amount - bin_size;
+      let tsc = Time_stamp_counter.now () in
+      t.bin <- (t.bin + 1) land bin_mask;
+      Array.unsafe_set t.hist t.bin tsc)
+    else t.cnt <- t.cnt + 1
+  ;;
+
+  let print t =
+    let ticki =
+      Array.foldi t.hist ~init:0 ~f:(fun i j _ ->
+          if Time_stamp_counter.(t.hist.(i) < t.hist.(j)) then i else j)
+    in
+    let tocki =
+      Array.foldi t.hist ~init:0 ~f:(fun i j _ ->
+          if Time_stamp_counter.(t.hist.(i) > t.hist.(j)) then i else j)
+    in
+    let tick = t.hist.(ticki) in
+    let tock = t.hist.(tocki) in
+    if Time_stamp_counter.(tock <= tick)
+    then Stdio.print_endline "Not enough info"
+    else (
+      let packets = Int.to_float (bin_size * Int.abs (tocki - ticki)) in
+      let dur =
+        Int63.to_float
+          Time_stamp_counter.(
+            Span.to_ns (diff tock tick) ~calibrator:(Lazy.force calibrator))
+      in
+      let rate = packets /. dur *. 1_000_000_000.0 in
+      Stdio.printf "Processed %f packets in %f ns. Rate %f\n" packets dur rate)
+  ;;
+end
+
 let do_rx_drop
     (_ : Xsk.Umem.t)
     fill
@@ -50,7 +102,7 @@ let do_rx_drop
   in
   let batch_size = 64 in
   let descs = Array.init frame_count ~f:(fun (_ : int) -> Xsk.Desc.create ()) in
-  let hist = Array.init 16 ~f:(fun (_ : int) -> Time_stamp_counter.zero) in
+  let hist = Hist.create () in
   if filled <> frame_count
   then (
     let error_string =
@@ -63,10 +115,6 @@ let do_rx_drop
   else (
     let rec drop_loop cnt =
       (* Every 1024 * 1024 frames store the current time *)
-      if cnt land (1023 * 1024) = 0
-      then (
-        let pos = (cnt lsl 20) land 0xFF in
-        Array.unsafe_set hist pos (Time_stamp_counter.now ()));
       if cnt >= upto
       then ()
       else (
@@ -80,6 +128,7 @@ let do_rx_drop
           for i = 0 to rcvd - 1 do
             Array.unsafe_set addrs i (Array.unsafe_get descs i).addr
           done;
+          Hist.incr hist rcvd;
           let filled =
             ref (Xsk.Fill_queue.produce_and_wakeup_kernel fill fd addrs ~pos:0 ~nb:rcvd)
           in
@@ -90,25 +139,7 @@ let do_rx_drop
           drop_loop (cnt + rcvd))
     in
     (drop_loop 0 : unit);
-    let last =
-      Array.findi hist ~f:(fun (_ : int) t -> Time_stamp_counter.(equal t zero))
-    in
-    let res =
-      match last with
-      | None -> Some (hist.(0), Array.last hist, 0)
-      | Some (pos, (_ : Time_stamp_counter.t)) ->
-        if pos = 0 then None else Some (hist.(0), hist.(pos - 1), (pos + 1) * 1024 * 1024)
-    in
-    (match res with
-    | Some (tick, tock, total) ->
-      let dur = Time_stamp_counter.diff tick tock in
-      let dur =
-        Time_stamp_counter.Span.to_time_span
-          dur
-          ~calibrator:(Lazy.force Time_stamp_counter.calibrator)
-      in
-      Stdio.printf "Dropped %d frames in %s\n" total (Time.Span.to_string_hum dur)
-    | None -> Stdio.print_endline "Not enough data for stats");
+    Hist.print hist;
     Or_error.return ())
 ;;
 
