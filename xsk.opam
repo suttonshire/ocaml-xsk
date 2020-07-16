@@ -1,9 +1,8 @@
 opam-version: "2.0"
-version: "0"
 name: "ocaml-xsk"
 synopsis: "OCaml bindings for the libbpf AF_XDP interface"
 maintainer: "Jesse DuMond <suttonshiredev@gmail.com>"
-authors: ["Jesse DuMond <suttonshiredev@gmail.com>"]
+authors: "Jesse DuMond <suttonshiredev@gmail.com>"
 license: "MIT"
 homepage: "https://github.com/suttonshire/ocaml-xsk"
 bug-reports: "https://github.com/suttonshire/ocaml-xsk/issues"
