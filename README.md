@@ -38,10 +38,10 @@ I don't have a local test setup with nice NICs so I've been testing this code on
 To run the benchmarks you have to make sure that traffic will go tothe correct NIC receive queue. You can configure that like so:
 
 ```bash
-ethtool -N enp1s0f1 flow-type ether dst 0c:42:a1:3d:85:19 src 1c:34:da:5c:3d:15 action 16
+ethtool -N enp1s0f1 flow-type ether dst <rxdrop eth mac> src <udp_pkt_gen eth mac> action <rxdrop queue>
 ```
 
-This command send all traffic from the transmitting benchmark NIC to the receive queue on the receiving benchmark NIC. Running the tests bench mark tools should result in something like this:
+This command sends all traffic from the transmitting benchmark NIC to the receive queue on the receiving benchmark NIC. Running the benchmark tools should result in something like this:
 
 ```bash
 root@ny5-c3:~/ocaml-xsk# ip link set dev enp1s0f1 xdp off; _build/default/bench/udp_pkt_gen.exe -d enp1s0f1 -dip 192.168.1.2:9999 -dmac 0c:42:a1:3d:85:19 -sip 192.168.1.1:9999 -smac 1c:34:da:5c:3d:15 -q 16 -c 105000000 -w -z
