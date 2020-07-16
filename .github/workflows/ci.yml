@@ -7,7 +7,7 @@ jobs:
     strategy:
       matrix:
         operating-system: [ ubuntu-20.04 ]
-        ocaml-version: [ '4.08.0', '4.09.0', '4.10.0']
+        ocaml-version: [ '4.08.0' ]
     env:
       XSK_TEST_DEPS_DIR: ${{ github.workspace }}/test
       XSK_TEST_INTF_NAME: test
@@ -21,7 +21,7 @@ jobs:
     - name: Update system package deps
       run: |
            sudo apt-get update
-           sudo apt-get install -y libelf-dev zlib1g-dev gcc-multilib opam ocaml
+           sudo apt-get install -y libelf-dev zlib1g-dev gcc-multilib opam ocaml pkg-config
     - name: Create opam switch
       run: |
            sudo opam init -y

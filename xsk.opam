@@ -15,6 +15,10 @@ depends: [
   "ppx_cstruct" {with-test}
   "ppx_expect" {with-test}
 ]
+depexts: [
+  "libelf-dev"
+  "zlib1g-dev"
+]
 build: [
   ["dune" "build" "-j" jobs "@install"] {build}
   ["dune" "runtest" "--profile=test"] {with-test}

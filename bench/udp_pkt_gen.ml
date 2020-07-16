@@ -96,7 +96,6 @@ let set_pkt ~src_mac ~dst_mac ~src_ip ~dst_ip pkt pos =
   set_udp4_src_port udp src_port;
   set_udp4_dst_port udp dst_port;
   set_udp4_len udp (sizeof_udp4 + data_len);
-  (* We don't set the csum for now *)
   set_udp4_csum udp 0;
   (* Create the data *)
   let buf = Cstruct.create data_len in
@@ -174,7 +173,6 @@ let send_batch batch_size frame_size send txq fd descs =
  * been sent is consumed
  *)
 let tx cnt frame_size cq socket txq =
-  Stdio.printf "Starting pkt get test\n";
   let fd = Xsk.Socket.fd socket in
   let max_batch_size = Int.min (Int.min frame_count cnt) 64 in
   let descs =
@@ -213,23 +211,17 @@ let tx cnt frame_size cq socket txq =
   let tick = Time_ns.now () in
   tx_loop 0 0;
   let tock = Time_ns.now () in
-  let dur = Time_ns.diff tock tick in
-  Stdio.printf "Sent %d packets in %s seconds" cnt (Time_ns.Span.to_string_hum dur)
+  let dur = Time_ns.diff tock tick |> Time_ns.Span.to_sec in
+  let pps = (Float.of_int cnt) /.  dur in
+  Stdio.printf "[udp_pkt_gen] %d (pkts) %f (s) %f (pps)\n" cnt dur pps
 ;;
 
-let make_xdp_flags mode =
-  match mode with
-  | Some flag -> [ flag; Xsk.Xdp_flag.XDP_FLAGS_UPDATE_IF_NOEXIST ]
-  | None -> [ Xsk.Xdp_flag.XDP_FLAGS_SKB_MODE; Xsk.Xdp_flag.XDP_FLAGS_UPDATE_IF_NOEXIST ]
-;;
-
-let make_bind_flags zero_copy needs_wakeup =
-  (* Default bind flags are [ XDP_COPY ] *)
+let make_flags zero_copy needs_wakeup =
   match zero_copy, needs_wakeup with
-  | None, None -> [ Xsk.Bind_flag.XDP_COPY ]
-  | Some zc, None -> [ zc ]
-  | None, Some nw -> [ nw ]
-  | Some zc, Some nw -> [ zc; nw ]
+  | None, None -> [ Xsk.Bind_flag.XDP_COPY ], [ Xsk.Xdp_flag.XDP_FLAGS_SKB_MODE ]
+  | Some zc, None -> [ zc ], [ Xsk.Xdp_flag.XDP_FLAGS_DRV_MODE ]
+  | None, Some nw -> [ nw; Xsk.Bind_flag.XDP_COPY ], [ Xsk.Xdp_flag.XDP_FLAGS_SKB_MODE ]
+  | Some zc, Some nw -> [ zc; nw ], [ Xsk.Xdp_flag.XDP_FLAGS_DRV_MODE ]
 ;;
 
 let populate_frames ~mem ~frame_size ~src_mac ~dst_mac ~src_ip ~dst_ip =
@@ -245,11 +237,11 @@ let populate_frames ~mem ~frame_size ~src_mac ~dst_mac ~src_ip ~dst_ip =
 
 let command =
   Command.basic
-    ~summary:"Generate a stream of 0 length UDP packets"
+    ~summary:"Generate a stream of minimum sized UDP packets"
     Command.Let_syntax.(
       let open Command.Param in
       let%map interface = flag "-d" (required string) ~doc:"device Device to transmit on"
-      and queue = flag "-q" (required int) ~doc:"queue_id Interface queue to transmit on"
+      and queue = flag "-q" (required int) ~doc:"queue_id Queue to bind to"
       and frame_size =
         flag "-f" (optional_with_default 2048 int) ~doc:"n Size of each frame in the umem"
       and src_ip =
@@ -281,21 +273,16 @@ let command =
             "destination_mac Destination mac address to use in the ethernet headers. \
              Format XX:XX:XX:XX:XX:XX"
       and zero_copy =
-        flag "-z" (no_arg_some Xsk.Bind_flag.XDP_ZEROCOPY) ~doc:"Zero copy mode"
+        flag "-z" (no_arg_some Xsk.Bind_flag.XDP_ZEROCOPY) ~doc:"Enable zero copy mode"
       and needs_wakeup =
         flag
           "-w"
           (no_arg_some Xsk.Bind_flag.XDP_USE_NEED_WAKEUP)
-          ~doc:"Use the needs wake up flag"
+          ~doc:"Enable the XDP_USE_NEED_WAKEUP flag"
       and cnt =
         flag "-c" (optional_with_default 1_000_000 int) ~doc:"n How many packets to send"
       in
-      let xdp_flags =
-        match zero_copy with
-        | None -> make_xdp_flags None
-        | Some _ -> make_xdp_flags (Some Xsk.Xdp_flag.XDP_FLAGS_DRV_MODE)
-      in
-      let bind_flags = make_bind_flags zero_copy needs_wakeup in
+      let bind_flags, xdp_flags = make_flags zero_copy needs_wakeup in
       fun () ->
         with_umem frame_size ~f:(fun mem umem (_ : Xsk.Fill_queue.t) comp ->
             with_socket
