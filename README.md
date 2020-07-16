@@ -2,7 +2,9 @@
 
 ![CI](https://github.com/suttonshire/ocaml-xsk/workflows/CI/badge.svg?branch=master)
 
-This is an OCaml to the XSK interface of libbpf. XSK is a simplified inteface to the linux specific AF_XDP sockets. The best introduction to AF_XDP sockets is from the kernel [documentation](https://github.com/torvalds/linux/blob/master/Documentation/networking/af_xdp.rst).
+This is an OCaml binding to the XSK interface of libbpf. XSK is a simplified inteface to the linux specific AF_XDP sockets. The best introduction to AF_XDP sockets is from the kernel [documentation](https://github.com/torvalds/linux/blob/master/Documentation/networking/af_xdp.rst).
+
+Testing shows that ocaml-xsk can transmit or receive packets at the line-rate of a 10Gb ethernet NIC.
 
 [libbpf](https://github.com/libbpf/libbpf) is a submodule to this repo. We use the v0.0.8 tag. When you clone this repo remember to use a recursive clone:
 
