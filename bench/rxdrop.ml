@@ -42,14 +42,17 @@ module Hist = struct
   let bin_size = 1024 * 1024
 
   type t =
-    { hist : Time_stamp_counter.t Array.t
+    { hist : Time_stamp_counter.Span.t Array.t
     ; mutable cnt : int
     ; mutable bin : int
+    ; mutable last_time : Time_stamp_counter.t
     }
 
   let create () =
-    let hist = Array.init bins ~f:(fun (_ : int) -> Time_stamp_counter.zero) in
-    { hist; cnt = 0; bin = 0 }
+    let hist =
+      Array.init bins ~f:(fun (_ : int) -> Time_stamp_counter.Span.of_int_exn 0)
+    in
+    { hist; cnt = 0; bin = 0; last_time = Time_stamp_counter.now () }
   ;;
 
   let incr t amount =
@@ -57,31 +60,34 @@ module Hist = struct
     then (
       t.cnt <- t.cnt + amount - bin_size;
       let tsc = Time_stamp_counter.now () in
-      Array.unsafe_set t.hist t.bin tsc;
+      let diff = Time_stamp_counter.diff tsc t.last_time in
+      t.last_time <- tsc;
+      Array.unsafe_set t.hist t.bin diff;
       t.bin <- (t.bin + 1) land bin_mask)
     else t.cnt <- t.cnt + amount
   ;;
 
   let print t =
-    match Array.find t.hist ~f:(fun t -> Time_stamp_counter.(equal t zero)) with
+    match
+      Array.find t.hist ~f:(fun t -> Time_stamp_counter.Span.(equal t (of_int_exn 0)))
+    with
     | Some _ -> Stdio.printf "Not enough samples"
     | None ->
       let max =
-        Array.fold t.hist ~init:Time_stamp_counter.zero ~f:(fun accum t ->
-            Time_stamp_counter.max accum t)
+        Array.fold t.hist ~init:t.hist.(0) ~f:(fun accum t ->
+            Time_stamp_counter.Span.max accum t)
+        |> Time_stamp_counter.Span.to_ns
+             ~calibrator:(Lazy.force Time_stamp_counter.calibrator)
       in
       let min =
-        Array.fold t.hist ~init:(Time_stamp_counter.now ()) ~f:(fun accum t ->
-            Time_stamp_counter.min accum t)
+        Array.fold t.hist ~init:t.hist.(0) ~f:(fun accum t ->
+            Time_stamp_counter.Span.min accum t)
+        |> Time_stamp_counter.Span.to_ns
+             ~calibrator:(Lazy.force Time_stamp_counter.calibrator)
       in
-      let dur = Time_stamp_counter.diff max min in
-      let s =
-        Time_stamp_counter.(Span.to_ns ~calibrator:(Lazy.force calibrator) dur)
-        |> Int63.to_int_exn
-        |> Int.to_float |> (/.) 1_000_000_000.0 
-      in
-      let p = bin_size * (Array.length t.hist - 2) in
-      Stdio.printf "[rxdrop] %d (packets) %f (s) %f (pps)\n" p s (Float.of_int p /. s)
+      let min_pps = Int.to_float bin_size /. (Int63.to_float min /. 1000000000.0) in
+      let max_pps = Int.to_float bin_size /. (Int63.to_float max /. 1000000000.0) in
+      Stdio.printf "[rxdrop] max: %f (pps) min: %f(pps) \n" max_pps min_pps
   ;;
 end
 
