@@ -161,7 +161,6 @@ module Umem : sig
 
   val create : buffer -> int -> Config.t -> t * Fill_queue.t * Comp_queue.t
   val delete : t -> unit
-  val fd : t -> Unix.file_descr
 end
 
 module Socket : sig
@@ -179,9 +178,19 @@ module Socket : sig
     val default : t
   end
 
+  (** [create interface queue umem config] creates an AF_XDP socket on the packet queue
+      [queue] of the network device [interface] and returns handles to the corresponding
+      Rx and Tx queues. *)
   val create : string -> int -> Umem.t -> Config.t -> t * Rx_queue.t * Tx_queue.t
+
+  (** [delete t] will release the OS level resources associated with socket [t]. The Rx
+      and Tx queue handles associated with [t] should not be used after calling [delete t]*)
   val delete : t -> unit
+
+  (** [fd t] file descripto associated with [t]. The file descriptor can be passed to
+      [Rx_queue.poll_and_consume] or [Tx_queue.produce_and_wakeup_kernel]. *)
   val fd : t -> Unix.file_descr
+
   val wakeup_kernel_with_sendto : t -> unit
   val pollin : t -> int -> bool
   val pollout : t -> int -> bool

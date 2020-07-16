@@ -289,10 +289,6 @@ module Umem = struct
   external delete_stub : umem -> unit = "umem_delete"
 
   let delete t = delete_stub t.umem
-
-  external fd_stub : umem -> Unix.file_descr = "umem_fd"
-
-  let fd t = fd_stub t.umem
 end
 
 module Socket = struct

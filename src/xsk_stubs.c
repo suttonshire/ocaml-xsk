@@ -144,15 +144,6 @@ CAMLprim value umem_delete(value vumem) {
   CAMLreturn(Val_unit);
 }
 
-CAMLprim value umem_fd(value vumem) {
-  struct xsk_umem *umem;
-  CAMLparam1(vumem);
-
-  umem = Umem_ptr_val(vumem);
-
-  CAMLreturn(Val_int(xsk_umem__fd(umem)));
-}
-
 CAMLprim value socket_create(value vifname, value vqueue_id, value vumem,
                              value vconfig) {
   struct xsk_socket *xsk;
