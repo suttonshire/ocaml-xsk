@@ -81,7 +81,7 @@ module Hist = struct
         |> Int.to_float
       in
       let p = 1024 * 1024 * Array.length t.hist in
-      Stdio.printf "[rxdrop] %d (packets) %f (ns) %f (pps)\n" p s Float.(of_int p / s)
+      Stdio.printf "[rxdrop] %d (packets) %f (ns) %f (pps)\n" p s (Float.of_int p /. s)
   ;;
 end
 
