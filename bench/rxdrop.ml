@@ -22,14 +22,18 @@ let with_umem frame_size ~f =
   let mem =
     Exn.protect
       ~f:(fun () -> Bigstring.map_file ~shared:true fd (frame_count * frame_size))
-      ~finally:(fun () -> Unix.close fd; Unix.unlink tmp_filename)
+      ~finally:(fun () ->
+        Unix.close fd;
+        Unix.unlink tmp_filename)
   in
   let config =
     Xsk.Umem.
       { Config.default with frame_size; fill_size = frame_count; comp_size = frame_count }
   in
   let umem, fill, comp = Xsk.Umem.create mem (Bigstring.length mem) config in
-  Exn.protect ~f:(fun () -> f mem umem fill comp) ~finally:(fun () -> Xsk.Umem.delete umem)
+  Exn.protect
+    ~f:(fun () -> f mem umem fill comp)
+    ~finally:(fun () -> Xsk.Umem.delete umem)
 ;;
 
 module Hist = struct
@@ -38,13 +42,13 @@ module Hist = struct
   let bin_size = 1024 * 1024
 
   type t =
-    { hist : Time_ns.t Array.t
+    { hist : Time_stamp_counter.t Array.t
     ; mutable cnt : int
     ; mutable bin : int
     }
 
   let create () =
-    let hist = Array.init 16 ~f:(fun (_ : int) -> Time_ns.min_value_representable) in
+    let hist = Array.init 16 ~f:(fun (_ : int) -> Time_stamp_counter.zero) in
     { hist; cnt = 0; bin = 0 }
   ;;
 
@@ -52,38 +56,32 @@ module Hist = struct
     if t.cnt + amount >= bin_size
     then (
       t.cnt <- t.cnt + amount - bin_size;
-      let tsc = Time_ns.now () in
+      let tsc = Time_stamp_counter.now () in
       Array.unsafe_set t.hist t.bin tsc;
       t.bin <- (t.bin + 1) land bin_mask)
     else t.cnt <- t.cnt + amount
   ;;
 
   let print t =
-    (* Most recent timestamp *)
-    let tock = t.hist.(t.bin) in
-    let tick_pos = ref t.bin in
-    let bin_span = ref 0 in
-    for i = 0 to bins - 1 do
-      let pos = (!tick_pos - i) land bin_mask in
-      Stdio.print_s (Time_ns.sexp_of_t t.hist.(pos));
-      if Time_ns.(t.hist.(pos) > min_value_representable)
-         && Time_ns.(t.hist.(pos) < tock)
-      then (
-        tick_pos := pos;
-        bin_span := !bin_span + 1)
-      else ()
-    done;
-    let tick = t.hist.(!tick_pos) in
-    if Time_ns.(tock <= tick) || !bin_span < 1
-    then Stdio.print_endline "Not enough info"
-    else (
-      let packets = Int.to_float (bin_size * (!bin_span)) in
-      let dur =
-        Time_ns.Span.to_sec
-          (Time_ns.diff tock tick)
+    match Array.find t.hist ~f:(fun t -> Time_stamp_counter.(equal t zero)) with
+    | None -> Stdio.printf "Not enough samples"
+    | Some _ ->
+      let max =
+        Array.fold t.hist ~init:Time_stamp_counter.zero ~f:(fun accum t ->
+            Time_stamp_counter.max accum t)
       in
-      let rate = packets /. dur in
-      Stdio.printf "Processed %f packets in %f s. Rate %f\n" packets dur rate)
+      let min =
+        Array.fold t.hist ~init:Time_stamp_counter.zero ~f:(fun accum t ->
+            Time_stamp_counter.min accum t)
+      in
+      let dur = Time_stamp_counter.diff max min in
+      let s =
+        Time_stamp_counter.(Span.to_ns ~calibrator:(Lazy.force calibrator) dur)
+        |> Int63.to_int_exn
+        |> Int.to_float
+      in
+      let p = 1024 * 1024 * Array.length t.hist in
+      Stdio.printf "[rxdrop] %d (packets) %f (ns) %f (pps)" p s Float.(of_int p / s)
   ;;
 end
 
@@ -132,9 +130,8 @@ let do_rx_drop
           for i = 0 to rcvd - 1 do
             let desc = Array.unsafe_get descs i in
             Array.unsafe_set addrs i desc.addr;
-            if desc.len >= 8 then (
-              ignore (Bigstring.unsafe_get_int64_le_trunc mem ~pos:desc.addr : int)
-            )
+            if desc.len >= 8
+            then ignore (Bigstring.unsafe_get_int64_le_trunc mem ~pos:desc.addr : int)
           done;
           Hist.incr hist rcvd;
           let filled =
