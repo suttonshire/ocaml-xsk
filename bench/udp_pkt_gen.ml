@@ -212,7 +212,7 @@ let tx cnt frame_size cq socket txq =
   tx_loop 0 0;
   let tock = Time_ns.now () in
   let dur = Time_ns.diff tock tick |> Time_ns.Span.to_sec in
-  let pps = (Float.of_int cnt) /.  dur in
+  let pps = Float.of_int cnt /. dur in
   Stdio.printf "[udp_pkt_gen] %d (pkts) %f (s) %f (pps)\n" cnt dur pps
 ;;
 
