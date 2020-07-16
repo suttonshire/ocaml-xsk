@@ -179,21 +179,22 @@ let command =
     ~summary:""
     Command.Let_syntax.(
       let open Command.Param in
-      let%map interface = flag "-d" (required string) ~doc:"The device"
-      and queue = flag "-q" (required int) ~doc:"The flag"
-      and frame_size = flag "-f" (optional_with_default 2048 int) ~doc:"Frame size"
+      let%map interface = flag "-d" (required string) ~doc:"device Device to receive on"
+      and queue = flag "-q" (required int) ~doc:"queue_id Queue to bind to"
+      and frame_size =
+        flag "-f" (optional_with_default 2048 int) ~doc:"n Size of each frame in the umem"
       and zero_copy =
-        flag "-z" (no_arg_some Xsk.Bind_flag.XDP_ZEROCOPY) ~doc:"Zero copy mode"
+        flag "-z" (no_arg_some Xsk.Bind_flag.XDP_ZEROCOPY) ~doc:"Enable zero copy mode"
       and needs_wakeup =
         flag
           "-w"
           (no_arg_some Xsk.Bind_flag.XDP_USE_NEED_WAKEUP)
-          ~doc:"Use the needs wake up flag"
+          ~doc:"Enable the XDP_USE_NEED_WAKEUP flag"
       and cnt =
         flag
           "-c"
-          (optional_with_default 1_000_000 int)
-          ~doc:"n How many packets to receive"
+          (optional_with_default (Sampler.bins * Sampler.bin_size) int)
+          ~doc:"n Stop after receiving n packets. Default 16 * 1024 * 1024"
       in
       fun () ->
         let bf, xdpf = make_flags zero_copy needs_wakeup in
