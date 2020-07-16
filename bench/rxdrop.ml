@@ -64,8 +64,8 @@ module Hist = struct
 
   let print t =
     match Array.find t.hist ~f:(fun t -> Time_stamp_counter.(equal t zero)) with
-    | None -> Stdio.printf "Not enough samples"
-    | Some _ ->
+    | Some _ -> Stdio.printf "Not enough samples"
+    | None ->
       let max =
         Array.fold t.hist ~init:Time_stamp_counter.zero ~f:(fun accum t ->
             Time_stamp_counter.max accum t)
@@ -81,7 +81,7 @@ module Hist = struct
         |> Int.to_float
       in
       let p = 1024 * 1024 * Array.length t.hist in
-      Stdio.printf "[rxdrop] %d (packets) %f (ns) %f (pps)" p s Float.(of_int p / s)
+      Stdio.printf "[rxdrop] %d (packets) %f (ns) %f (pps)\n" p s Float.(of_int p / s)
   ;;
 end
 
