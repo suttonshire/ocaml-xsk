@@ -420,7 +420,7 @@ CAMLprim value rx_queue_cons(value vr, value varr, value vpos, value vnb) {
 
 CAMLprim intnat rx_queue_poll_cons_nat(value vr, intnat sock, intnat timeout,
                                        value varr, intnat pos, intnat nb) {
-  intnat cnt = 0;
+  int cnt = 0;
 
   cnt = rx_queue_cons_nat(vr, varr, pos, nb);
   if (cnt == 0) {
