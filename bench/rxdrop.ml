@@ -71,7 +71,7 @@ module Hist = struct
             Time_stamp_counter.max accum t)
       in
       let min =
-        Array.fold t.hist ~init:Time_stamp_counter.zero ~f:(fun accum t ->
+        Array.fold t.hist ~init:(Time_stamp_counter.now ()) ~f:(fun accum t ->
             Time_stamp_counter.min accum t)
       in
       let dur = Time_stamp_counter.diff max min in
