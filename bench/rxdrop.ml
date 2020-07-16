@@ -37,7 +37,7 @@ let with_umem frame_size ~f =
 ;;
 
 module Hist = struct
-  let bins = 16
+  let bins = 2 lsl 4
   let bin_mask = bins - 1
   let bin_size = 1024 * 1024
 
@@ -48,7 +48,7 @@ module Hist = struct
     }
 
   let create () =
-    let hist = Array.init 16 ~f:(fun (_ : int) -> Time_stamp_counter.zero) in
+    let hist = Array.init bins ~f:(fun (_ : int) -> Time_stamp_counter.zero) in
     { hist; cnt = 0; bin = 0 }
   ;;
 
@@ -78,10 +78,10 @@ module Hist = struct
       let s =
         Time_stamp_counter.(Span.to_ns ~calibrator:(Lazy.force calibrator) dur)
         |> Int63.to_int_exn
-        |> Int.to_float
+        |> Int.to_float |> (/.) 1_000_000_000.0 
       in
-      let p = 1024 * 1024 * Array.length t.hist in
-      Stdio.printf "[rxdrop] %d (packets) %f (ns) %f (pps)\n" p s (Float.of_int p /. s)
+      let p = bin_size * (Array.length t.hist - 2) in
+      Stdio.printf "[rxdrop] %d (packets) %f (s) %f (pps)\n" p s (Float.of_int p /. s)
   ;;
 end
 
