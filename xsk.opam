@@ -7,6 +7,7 @@ license: "MIT"
 homepage: "https://github.com/suttonshire/ocaml-xsk"
 bug-reports: "https://github.com/suttonshire/ocaml-xsk/issues"
 depends: [
+  "ocaml" { >= "4.08.0" }
   "dune" {build}
   "base" {with-test}
   "base_bigstring" {with-test}

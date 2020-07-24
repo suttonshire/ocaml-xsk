@@ -1,5 +1,6 @@
 (library
  (name xsk)
+ (public_name xsk)
  (libraries libbpf_c)
  (ocamlopt_flags :standard -O3)
  (c_library_flags :standard -lelf -lz)

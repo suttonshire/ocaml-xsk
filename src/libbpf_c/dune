@@ -2,6 +2,7 @@
 
 (library
  (name libbpf_c)
+ (public_name xsk.libbpf)
  (c_library_flags :standard -lelf -lz)
  (foreign_archives bpf))
 
