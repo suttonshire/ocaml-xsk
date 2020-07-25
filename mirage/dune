@@ -1,0 +1,7 @@
+(library
+ (name netif_xsk)
+ (public_name netif-xsk)
+ (libraries lwt.unix macaddr cstruct mirage mirage-net xsk)
+ (preprocess
+  (pps lwt_ppx))
+ (ocamlopt_flags -O3))

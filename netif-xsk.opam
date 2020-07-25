@@ -1,0 +1,24 @@
+opam-version: "2.0"
+version: "dev"
+maintainer: "Jesse DuMond <suttonshiredev@gmail.com>"
+authors: "Jesse DuMond <suttonshiredev@gmail.com>"
+license: "MIT"
+homepage: "https://github.com/suttonshire/ocaml-xsk"
+bug-reports: "https://github.com/suttonshire/ocaml-xsk/issues"
+dev-repo: "git+https://github.com/suttonshire/ocaml-xsk.git"
+build: [
+  ["dune" "subst"] {pinned}
+  ["dune" "build" "-p" name "-j" jobs]
+]
+depends: [
+  "ocaml" { >= "4.08.0" }
+  "macaddr"
+  "mirage"
+  "mirage-net"
+  "cstruct"
+  "lwt_ppx"
+  "lwt"
+  "xsk"
+  "dune" {build}
+]
+synopsis: "The ocaml-xsk implementation of the Mirage_net.S interface"

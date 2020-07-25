@@ -1,4 +1,5 @@
 opam-version: "2.0"
+version: "dev"
 name: "ocaml-xsk"
 synopsis: "OCaml bindings for the libbpf AF_XDP interface"
 maintainer: "Jesse DuMond <suttonshiredev@gmail.com>"
@@ -21,7 +22,8 @@ depexts: [
   "zlib1g-dev"
 ]
 build: [
-  ["dune" "build" "-j" jobs "@install"] {build}
+  ["dune" "subst"] {pinned}
+  ["dune" "build" "-p" name "-j" jobs]
   ["dune" "runtest" "--profile=test"] {with-test}
 ]
 dev-repo: "git+https://github.com/suttonshire/ocaml-xsk.git"
