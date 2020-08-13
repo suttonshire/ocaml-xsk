@@ -350,12 +350,13 @@ CAMLprim intnat fill_queue_produce_and_wakeup_nat(value vr, intnat sock,
   return cnt;
 }
 
-CAMLprim value fill_queue_produce_and_wakeup(value vr, value vsock,
-                                             value vtimeout, value varr,
-                                             value vpos, value vnb) {
-  return Val_int(
-      fill_queue_produce_and_wakeup_nat(vr, Int_val(vsock), Int_val(vtimeout),
-                                        varr, Int_val(vpos), Int_val(vnb)));
+CAMLprim value fill_queue_produce_and_wakeup(value *argv, int argc) {
+  if (argc != 6) {
+    raise_errno(EINVAL);
+  }
+  return Val_int(fill_queue_produce_and_wakeup_nat(
+      argv[0], Int_val(argv[1]), Int_val(argv[2]), argv[3], Int_val(argv[4]),
+      Int_val(argv[5])));
 }
 
 CAMLprim intnat tx_queue_produce_nat(value vr, value varr, intnat pos,
@@ -417,8 +418,10 @@ CAMLprim intnat rx_queue_poll_cons_nat(value vr, intnat sock, intnat timeout,
   return rx_queue_cons_nat(vr, varr, pos, nb);
 }
 
-CAMLprim value rx_queue_poll_cons(value vr, value vsock, value vtimeout,
-                                  value varr, value vpos, value vnb) {
-  return rx_queue_poll_cons_nat(vr, Int_val(vsock), Int_val(vtimeout), varr,
-                                Int_val(vpos), Int_val(vnb));
+CAMLprim value rx_queue_poll_cons(value *argv, int argc) {
+  if (argc != 6) {
+    raise_errno(EINVAL);
+  }
+  return rx_queue_poll_cons_nat(argv[0], Int_val(argv[1]), Int_val(argv[2]),
+                                argv[3], Int_val(argv[4]), Int_val(argv[5]));
 }
