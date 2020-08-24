@@ -103,7 +103,7 @@ let reset_stats_counters t = Stats.reset t.stats
 let get_stats_counters t = t.stats
 
 let listen t ~header_size f =
-  if header_size <> ethernet_header_len || header_size <> ethernet_header_vlan_len
+  if header_size <> ethernet_header_len && header_size <> ethernet_header_vlan_len
   then (
     let%lwt () = Lwt_io.printf "listen invalid header_size %d\n" header_size in
     Lwt.return_error `Invalid_length)
