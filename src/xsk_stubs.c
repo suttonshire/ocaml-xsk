@@ -323,7 +323,7 @@ CAMLprim intnat fill_queue_produce_nat(value vr, value varr, intnat pos,
 }
 
 CAMLprim value fill_queue_produce(value vr, value varr, value vpos, value vnb) {
-  return Val_int(fill_queue_produce(vr, varr, Int_val(vpos), Int_val(vnb)));
+  return Val_int(fill_queue_produce_nat(vr, varr, Int_val(vpos), Int_val(vnb)));
 }
 
 CAMLprim intnat fill_queue_produce_and_wakeup_nat(value vr, intnat sock,
